@@ -17,7 +17,7 @@ class Game {
 		this.h = cnf.h || 4;
 
 		/** @TODO: selvitä oikean pelin merkit */
-		this.charsArr = "abcdefghijklmnopqrstuvwxyzåäö".split("").map( v => [ v ]);
+		this.charsArr = (cnf.chars || "abcdefghijklmnopqrstuvwxyzåäö").split("").map( v => [ v ]);
 
 		this.ctime = new Date();
 
@@ -43,7 +43,7 @@ class Game {
 	}
 }
 
-bot.onText(/\/start(\s+\d+)?(\s+\d+)?(\s+\d+)?/, (msg, match) => {
+bot.onText(/\/start(\s+\d+)?(\s+\d+)?(\s+\d+)?(\s+[\wåäö]+)?/, (msg, match) => {
 	try {
 		handleCmdStart( msg, match )
 	} catch( err ) {
@@ -70,27 +70,31 @@ function handleCmdStart( msg, match ) {
 	if (match[3]) cnf.w = parseInt(match[3]);
 	else if (match[2]) cnf.w = cnf.h;
 
+	if (match[4]) cnf.chars = match[4].toLowerCase().replace( /[^\wåäö]/g , "");
+
 	const game = games[ chatId ] = new Game( cnf );
 
 	bot.sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!` );
 
 	if (match[1]) {
 		var timeout_s = parseInt( match[1] );
+		if (timeout_s > 0) { 
 
-		game.$timeout = setTimeout(() => {
-			delete games[ chatId ];
-			bot.sendMessage( chatId, `Aika loppui! Peli päättyi.` );
-		}, timeout_s * 1000 );
-		game.$timeouts = [ game.$timeout ];
+			game.$timeout = setTimeout(() => {
+				delete games[ chatId ];
+				bot.sendMessage( chatId, `Aika loppui! Peli päättyi.` );
+			}, timeout_s * 1000 );
+			game.$timeouts = [ game.$timeout ];
 
-		
-		if (timeout_s > 20) {
-			game.$timeouts.push( setTimeout(() => {
-				bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!` );
-			}, (timeout_s - 5) * 1000 ));
+			
+			if (timeout_s > 20) {
+				game.$timeouts.push( setTimeout(() => {
+					bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!` );
+				}, (timeout_s - 5) * 1000 ));
+			}
+
+			bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua` );
 		}
-
-		bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua` );
 	}
 
 	bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
