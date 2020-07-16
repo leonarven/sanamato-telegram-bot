@@ -134,7 +134,7 @@ bot.onText(/\/stop/, (msg, match) => {
 function handleCmdStart( msg, match ) {
 	const chatId = msg.chat.id;
 
-	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.` );
+	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
 
 	const cnf = {};
 
@@ -154,33 +154,33 @@ function handleCmdStart( msg, match ) {
 
 			game.$timeout = setTimeout(() => {
 				delete games[ chatId ];
-				bot.sendMessage( chatId, `Aika loppui! Peli päättyi.` );
+				bot.sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
 			}, timeout_s * 1000 );
 			game.$timeouts = [ game.$timeout ];
 
 			
 			if (timeout_s > 20) {
 				game.$timeouts.push( setTimeout(() => {
-					bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!` );
+					bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
 				}, (timeout_s - 5) * 1000 ));
 			}
 
-			bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua` );
+			bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua`, { disable_notification: true } );
 		}
 	}
 
-	bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+	bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
 }
 
 function handleCmdStop( msg, match ) {
 	const chatId = msg.chat.id;
 	const game = games[ chatId ];
 
-	if (!game) return bot.sendMessage( chatId, "Ei peliä, joka lopettaa!" );
+	if (!game) return bot.sendMessage( chatId, "Ei peliä, joka lopettaa!", { disable_notification: true } );
 
 	if (game.$timeout) for (var timeout of game.$timeouts) clearTimeout( timeout );
 
 	delete games[ chatId ];
 
-	bot.sendMessage( chatId, "Peli lopetettu!" );
+	bot.sendMessage( chatId, "Peli lopetettu!", { disable_notification: true } );
 }
