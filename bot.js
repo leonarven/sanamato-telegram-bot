@@ -144,10 +144,6 @@ bot.onText(/^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => 
 	console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
 
 	try {
-		const chatId = msg.chat.id;
-
-		if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
-
 		handleCmdPeli( msg, {
 			size:    match[1] == null ? 5     : parseInt(match[1]),
 			timeout: match[2] == null ? null  : parseInt(match[2]),
@@ -161,11 +157,11 @@ bot.onText(/^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => 
 
 /**
  * Komennon /kisa käsittely
- * /kisa /^\d+/ = A-pituinen kierros, jonka pisteet lasketaan
- * /kisa /^\d+/ /^\d+/ = A-pituisia manuaalisesti jatkettavia kierroksia B-kpl joiden, jonka pisteet lasketaan
- * /kisa /^\d+/ /^\d+/ /^\d+/ = A-pituisia C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan
- * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ = A-pituisia D-kokoisella laudalla C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan
- * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ xyz = A-pituisia D-kokoisella laudalla C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan, käyttäen merkistöä xyz
+ * /kisa /^\d+/ = A-kokoisella laudalla järjestetty manuaalisesti lopetettava peli, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ = A-kokoisella laudalla järjestetty, B-pituinen peli, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ = A-kokoisella laudalla järjestettyjä, B-pituisia pelejä C-kpl, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ = A-kokoisella laudalla järjestettyjä B-pituisia D-välein pelattavia ohjattuja kierroksia C-kpl joiden, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ xyz = A-kokoisella laudalla järjestettyjä merkistöä zyx käyttäviä B-pituisia D-välein pelattavia ohjattuja kierroksia C-kpl joiden, jonka pisteet lasketaan
  *
  * @param (number=5)         match[1] Käytetyn laudan koko
  * @param (number|undefined) match[2] Kierroksen pituus, jos halutaan
@@ -173,19 +169,21 @@ bot.onText(/^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => 
  * @param (number|undefined) match[4] Automaatiolla (jos asetettu) määritelty kierrosten välinen aika
  * @param (string="fin")     match[5] Käytetty kirjaimisto tai sen koodi
  *
- *          -> CMD       |timeout   |rounds    |delay     |size      |chars */
-/*bot.onText(/^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
-	console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
+ *          -> CMD       |size      |timeout   |rounds    |delay     |chars */
+bot.onText(/^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
+	console.debug( "bot.onText(\/kisa, ( msg, match )) :: ", msg, match );
 	try {
-		handleCmdPeli( msg, {
-			timeout: match[1],
-			size:    match[2],
-			chars:   match[3]
+		handleCmdKisa( msg, {
+			size:    match[1] == null ? 5     : parseInt(match[1]),
+			timeout: match[2] == null ? null  : parseInt(match[2]),
+			rounds:  match[3] == null ? 1     : parseInt(match[3]),
+			delay:   match[4] == null ? null  : parseInt(match[4]),
+			chars:   match[5] == null ? "fin" : match[5]
 		});
 	} catch( err ) {
 		console.error( "ERROR at bot.onText(\/start) ::", err );
 	}
-});*/
+});
 
 
 /**
@@ -208,17 +206,12 @@ bot.onText(/\/stop/, (msg, match) => {
 function handleCmdPeli( msg, opts ) {
 	console.debug( "handleCmdPeli( msg, opts ) ::", msg, opts );
 
-	if (opts.size    == null) opts.size    = 5;
-	if (opts.timeout == null) opts.timeout = Infinity;
-	if (opts.chars   == null) opts.chars   = "fin"; 
-
-	if (typeof opts.size    != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
-	if (typeof opts.timeout != "number" || opts.timeout <= 0) throw "Invalid argument opts.timeout";
-	if (typeof opts.chars   != "string" || opts.chars.length == 0) throw "Invalid argument opts.chars";
-
-	opts.chars = opts.chars.toLowerCase().replace( /[^\wåäö]/g, "");
+	handleCmdPeli.parseOpts( opts );
 
 	const chatId = msg.chat.id;
+
+	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+	
 	const game = games[ chatId ] = new Game( opts );
 
 	bot.sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!` );
@@ -259,6 +252,53 @@ function handleCmdPeli( msg, opts ) {
 		console.log( "hereiam2", response );
 	});
 }
+handleCmdPeli.parseOpts = opts => {
+	if (opts.size == null) opts.size = 5;
+	else if (typeof opts.size != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
+
+
+	if (opts.timeout == null) opts.timeout = Infinity;
+	else if (typeof opts.timeout != "number" || opts.timeout <= 0 || !isFinite(opts.timeout)) throw "Invalid argument opts.timeout";
+
+
+	if (opts.chars == null) opts.chars  = "fin"; 
+	else if (typeof opts.chars != "string" || opts.chars.length == 0) throw "Invalid argument opts.chars";
+
+	opts.chars = opts.chars.toLowerCase().replace( /[^\wåäö]/g, "");
+};
+
+/************************************************/
+
+/**
+ * @param {number} [opts.size=5]           - Käytetyn laudan koko
+ * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
+ * @param {number} [opts.rounds=1]         - Kierrosten lukumäärä
+ * @param {number} [opts.delay=Infinity]   - Kierrosten välinen aika
+ * @param {string} [opts.chars=fin]        - Käytetty kirjaimisto tai sen koodi
+ */
+function handleCmdKisa( msg, opts ) {
+	console.debug( "handleCmdKisa( msg, opts ) ::", msg, opts );
+
+	handleCmdKisa.parseOpts( opts );
+
+	const chatId = msg.chat.id;
+	
+	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+
+	return console.debug( opts );
+}
+handleCmdKisa.parseOpts = opts => {
+	handleCmdPeli.parseOpts( opts );
+
+	if (opts.rounds == null) opts.rounds = 1;
+	if (typeof opts.rounds != "number" || opts.rounds < 1 || !isFinite(opts.rounds)) throw "Invalid argument opts.rounds";
+
+
+	if (opts.delay == null) opts.delay = Infinity;
+	else if (typeof opts.delay != "number" || opts.delay <= 0 || !isFinite(opts.delay)) throw "Invalid argument opts.delay";
+};
+
+/************************************************/
 
 function handleCmdStop( msg, match ) {
 	const chatId = msg.chat.id;
