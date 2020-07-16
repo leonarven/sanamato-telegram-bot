@@ -81,29 +81,41 @@ if (!token) throw "Missing parameter --token";
 
 const bot = new TelegramBot( token, { polling: true });
 
+bot.on('polling_error', err => {
+	console.error( "ERROR at bot.on(polling_error) ::", err );
+});
+
 const games = {};
 
 class Game {
 	constructor( cnf = {} ) {
-		this.w = cnf.w || 4;
-		this.h = cnf.h || 4;
+		console.debug( "new Game( cnf ) ::", cnf );
+
+		this.w = cnf.w || cnf.size || 5;
+		this.h = cnf.h || cnf.size || 5;
 
 		/** @TODO: selvitä oikean pelin merkit */
-		this.charsArr = (cnf.chars || CHAR_STR).split("").map( v => [ v ]);
+		if (cnf.chars == "fin" || !cnf.chars) cnf.chars = CHAR_STR;
+
+		this.charsArr = cnf.chars.split("").map( v => [ v ]);
 
 		this.ctime = new Date();
 
-
-		this.charsArr.sort(() => Math.random()-.5 );
 		this.board = [];
 		for (var row, y = 0; y < this.h; y++) {
 			this.board.push( row = [] );
 			for (var x = 0; x < this.w; x++) {
-				var idx = y * this.w + x;
-				var chars = this.charsArr[ idx % this.charsArr.length ];
-				row.push( chars[ parseInt( Math.random() * chars.length )]);
+				var idx = (y * this.w + x) % this.charsArr.length;
+
+				// Sallitaan matriisia lyhyempien merkistöjen uudelleenkäyttö merkkisarjojen toistumatta
+				if (idx == 0) this.charsArr.sort(() => Math.random()-.5 );
+				
+				// Noudetaan kutakin merkkiä vastaavista merkeistä satunnainen (Not implemented! = tuloksena aina yhden pituisen tauluikon ensimmäinen alkio)
+				row.push( this.charsArr[ idx ].length > 1 ? this.charsArr[ idx ][ parseInt( Math.random() * this.charsArr[ idx ].length )] : this.charsArr[ idx ][0]);
 			}
 		}
+
+		console.debug( "Game() ::", this );
 	}
 
 	toString( opts = {} ) {
@@ -115,62 +127,118 @@ class Game {
 	}
 }
 
-bot.onText(/\/start(\s+\d+)?(\s+\d+)?(\s+\d+)?(\s+[\wåäö]+)?/, (msg, match) => {
+/*************************************/
+
+/**
+ * Komennon /peli käsittely
+ * /peli /^\d+/ = A-pituinen kierros
+ * /peli /^\d+/ /^\d+/ = A-pituinen kierros B-kokoisella laudalla
+ * /peli /^\d+/ /^\d+/ xyz = A-pituinen kierros B-kokoisella laudalla käyttäen merkistöä xyz
+ *
+ * @param {number} [match[1]=5]    - Käytetyn laudan koko
+ * @param {number} [match[2]=null] - Kierroksen pituus
+ * @param {string} [match[3]=fin]  - Käytetty kirjaimisto tai sen koodi
+ *
+ *          -> CMD       |timeout   |size      |chars */
+bot.onText(/^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => {
+	console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
+
 	try {
-		handleCmdStart( msg, match )
+		const chatId = msg.chat.id;
+
+		if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+
+		handleCmdPeli( msg, {
+			size:    match[1] == null ? 5     : parseInt(match[1]),
+			timeout: match[2] == null ? null  : parseInt(match[2]),
+			chars:   match[3] == null ? "fin" : match[3]
+		});
 	} catch( err ) {
 		console.error( "ERROR at bot.onText(\/start) ::", err );
 	}
 });
 
-bot.onText(/\/stop/, (msg, match) => {
+
+/**
+ * Komennon /kisa käsittely
+ * /kisa /^\d+/ = A-pituinen kierros, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ = A-pituisia manuaalisesti jatkettavia kierroksia B-kpl joiden, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ = A-pituisia C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ = A-pituisia D-kokoisella laudalla C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan
+ * /kisa /^\d+/ /^\d+/ /^\d+/ /^\d+/ xyz = A-pituisia D-kokoisella laudalla C-välein pelattavia ohjattuja kierroksia B-kpl joiden, jonka pisteet lasketaan, käyttäen merkistöä xyz
+ *
+ * @param (number=5)         match[1] Käytetyn laudan koko
+ * @param (number|undefined) match[2] Kierroksen pituus, jos halutaan
+ * @param (number=1)         match[3] Kierrosten lukumäärä
+ * @param (number|undefined) match[4] Automaatiolla (jos asetettu) määritelty kierrosten välinen aika
+ * @param (string="fin")     match[5] Käytetty kirjaimisto tai sen koodi
+ *
+ *          -> CMD       |timeout   |rounds    |delay     |size      |chars */
+/*bot.onText(/^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
+	console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
 	try {
-		handleCmdStop( msg, match )
+		handleCmdPeli( msg, {
+			timeout: match[1],
+			size:    match[2],
+			chars:   match[3]
+		});
+	} catch( err ) {
+		console.error( "ERROR at bot.onText(\/start) ::", err );
+	}
+});*/
+
+
+/**
+ */
+bot.onText(/\/stop/, (msg, match) => {
+	console.debug( "bot.onText(\/stop, ( msg, match )) :: ", msg, match );
+	try {
+		handleCmdStop( msg, match );
 	} catch( err ) {
 		console.error( "ERROR at bot.onText(\/stop) ::", err );
 	}
 });
 
-bot.on('polling_error', err => {
-	console.error( "ERROR at bot.on(polling_error) ::", err );
-});
+/**
+ * @param {number} [opts.size=5]           - Käytetyn laudan koko
+ * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
+ * @param {string} [opts.chars=fin]        - Käytetty kirjaimisto tai sen koodi
+ */
 
-function handleCmdStart( msg, match ) {
+function handleCmdPeli( msg, opts ) {
+	console.debug( "handleCmdPeli( msg, opts ) ::", msg, opts );
+
+	if (opts.size    == null) opts.size    = 5;
+	if (opts.timeout == null) opts.timeout = Infinity;
+	if (opts.chars   == null) opts.chars   = "fin"; 
+
+	if (typeof opts.size    != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
+	if (typeof opts.timeout != "number" || opts.timeout <= 0) throw "Invalid argument opts.timeout";
+	if (typeof opts.chars   != "string" || opts.chars.length == 0) throw "Invalid argument opts.chars";
+
+	opts.chars = opts.chars.toLowerCase().replace( /[^\wåäö]/g, "");
+
 	const chatId = msg.chat.id;
-
-	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
-
-	const cnf = {};
-
-	if (match[2]) cnf.h = parseInt(match[2]); 
-	if (match[3]) cnf.w = parseInt(match[3]);
-	else if (match[2]) cnf.w = cnf.h;
-
-	if (match[4]) cnf.chars = match[4].toLowerCase().replace( /[^\wåäö]/g , "");
-
-	const game = games[ chatId ] = new Game( cnf );
+	const game = games[ chatId ] = new Game( opts );
 
 	bot.sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!` );
 
-	if (match[1]) {
-		var timeout_s = parseInt( match[1] );
-		if (timeout_s > 0) { 
+	if (isFinite( opts.timeout ) && opts.timeout > 0) {
+		var timeout_s = opts.timeout;
+		game.$timeout = setTimeout(() => {
+			delete games[ chatId ];
+			bot.sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
+		}, timeout_s * 1000 );
+		game.$timeouts = [ game.$timeout ];
 
-			game.$timeout = setTimeout(() => {
-				delete games[ chatId ];
-				bot.sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
-			}, timeout_s * 1000 );
-			game.$timeouts = [ game.$timeout ];
-
-			
-			if (timeout_s > 20) {
-				game.$timeouts.push( setTimeout(() => {
-					bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
-				}, (timeout_s - 5) * 1000 ));
-			}
-
-			bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua`, { disable_notification: true } );
+		
+		if (timeout_s > 20) {
+			game.$timeouts.push( setTimeout(() => {
+				bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
+			}, (timeout_s - 5) * 1000 ));
 		}
+
+		bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua`, { disable_notification: true } );
 	}
 
 	return bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
