@@ -131,6 +131,10 @@ bot.onText(/\/stop/, (msg, match) => {
 	}
 });
 
+bot.on('polling_error', err => {
+	console.error( "ERROR at bot.on(polling_error) ::", err );
+});
+
 function handleCmdStart( msg, match ) {
 	const chatId = msg.chat.id;
 
@@ -169,7 +173,23 @@ function handleCmdStart( msg, match ) {
 		}
 	}
 
-	bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+	return bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+
+	new Promise(( resolve, reject ) => {
+		try {
+			const canvas = require( "./StrArrToImage.js" )( game.board );
+
+			bot.sendPhoto( chatId, canvas.createPNGStream(), {}, { contentType: "image/png" }).then(resolve).catch(reject);
+		} catch( err ) { reject( err ); }
+	}).then( response => {
+		console.log("hereiam", response);
+	}).catch( err => {
+		console.error( err );
+
+		return bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+	}).then( response => {
+		console.log( "hereiam2", response );
+	});
 }
 
 function handleCmdStop( msg, match ) {
