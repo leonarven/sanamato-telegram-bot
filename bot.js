@@ -85,11 +85,30 @@ bot.on('polling_error', err => {
 	console.error( "ERROR at bot.on(polling_error) ::", err );
 });
 
+function sendMessage() {
+	console.debug( "sendMessage() ::", arguments );
+	return bot.sendMessage.apply( bot, arguments );
+}
+
+/***************/
+
+const chats = {};
+
+class Chat {
+	constructor( chatId, msgChat = {}) {
+		this.id = chatId;
+		this.title = msgChat.title || chatId;
+	}
+
+}
+
+/***************/
+
 const games = {};
 
-class Game {
+class GameAbstract {
 	constructor( cnf = {} ) {
-		console.debug( "new Game( cnf ) ::", cnf );
+		console.debug( "new GameAbstract( cnf ) ::", cnf );
 
 		this.w = cnf.w || cnf.size || 5;
 		this.h = cnf.h || cnf.size || 5;
@@ -115,7 +134,17 @@ class Game {
 			}
 		}
 
-		console.debug( "Game() ::", this );
+		this.$timeouts = [];
+		if (isFinite( cnf.timeout ) && cnf.timeout > 0 && typeof cnf.timeoutFn == "function") {
+			this.$timeouts.push( setTimeout( cnf.timeoutFn, 1000 * cnf.timeout ));
+			for (var tMinus in cnf.timeoutFn.tMinus) {
+				if (typeof cnf.timeoutFn.tMinus[tMinus] == "function") {
+					this.$timeouts.push( setTimeout( cnf.timeoutFn.tMinus[tMinus], 1000 * (cnf.timeout - parseInt( tMinus ))));
+				}
+			}
+		}
+
+		console.debug( "GameAbstract() ::", this );
 	}
 
 	toString( opts = {} ) {
@@ -156,6 +185,71 @@ bot.onText(/^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => 
 
 
 /**
+ * @param {number} [opts.size=5]           - Käytetyn laudan koko
+ * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
+ * @param {string} [opts.chars=fin]        - Käytetty kirjaimisto tai sen koodi
+ */
+
+function handleCmdPeli( msg, opts ) {
+	console.debug( "handleCmdPeli( msg, opts ) ::", arguments );
+
+	handleCmdPeli.parseOpts( opts );
+
+	const chatId = msg.chat.id;
+
+	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+	
+	if (isFinite( opts.timeout ) && opts.timeout > 0) {
+		opts.timeoutFn = () => {
+			delete games[ chatId ];
+			sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
+		};
+		opts.timeoutFn.tMinus = {
+			5: () => {
+				sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
+			}
+		};
+		sendMessage( chatId, `Ajastetaan peli päättymään ${ opts.timeout } sekunnin kuluttua`, { disable_notification: true } );
+	}
+
+	const game = games[ chatId ] = new GameAbstract( opts );
+
+	sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!\n`+"```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
+
+//	new Promise(( resolve, reject ) => {
+//		try {
+//			const canvas = require( "./StrArrToImage.js" )( game.board );
+//			bot.sendPhoto( chatId, canvas.createPNGStream(), {}, { contentType: "image/png" }).then(resolve).catch(reject);
+//		} catch( err ) { reject( err ); }
+//	}).then( response => {
+//		console.log("hereiam", response);
+//	}).catch( err => {
+//		console.error( err );
+//		return sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+//	}).then( response => {
+//		console.log( "hereiam2", response );
+//	});
+
+}
+
+handleCmdPeli.parseOpts = opts => {
+	if (opts.size == null) opts.size = 5;
+	else if (typeof opts.size != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
+
+
+	if (opts.timeout == null) opts.timeout = Infinity;
+	else if (typeof opts.timeout != "number" || opts.timeout <= 0 || !isFinite(opts.timeout)) throw "Invalid argument opts.timeout";
+
+
+	if (opts.chars == null) opts.chars  = "fin"; 
+	else if (typeof opts.chars != "string" || opts.chars.length == 0) throw "Invalid argument opts.chars";
+
+	opts.chars = opts.chars.toLowerCase().replace( /[^\wåäö]/g, "");
+};
+
+/************************************************/
+
+/**
  * Komennon /kisa käsittely
  * /kisa /^\d+/ = A-kokoisella laudalla järjestetty manuaalisesti lopetettava peli, jonka pisteet lasketaan
  * /kisa /^\d+/ /^\d+/ = A-kokoisella laudalla järjestetty, B-pituinen peli, jonka pisteet lasketaan
@@ -185,90 +279,6 @@ bot.onText(/^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)
 	}
 });
 
-
-/**
- */
-bot.onText(/\/stop/, (msg, match) => {
-	console.debug( "bot.onText(\/stop, ( msg, match )) :: ", msg, match );
-	try {
-		handleCmdStop( msg, match );
-	} catch( err ) {
-		console.error( "ERROR at bot.onText(\/stop) ::", err );
-	}
-});
-
-/**
- * @param {number} [opts.size=5]           - Käytetyn laudan koko
- * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
- * @param {string} [opts.chars=fin]        - Käytetty kirjaimisto tai sen koodi
- */
-
-function handleCmdPeli( msg, opts ) {
-	console.debug( "handleCmdPeli( msg, opts ) ::", msg, opts );
-
-	handleCmdPeli.parseOpts( opts );
-
-	const chatId = msg.chat.id;
-
-	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
-	
-	const game = games[ chatId ] = new Game( opts );
-
-	bot.sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!` );
-
-	if (isFinite( opts.timeout ) && opts.timeout > 0) {
-		var timeout_s = opts.timeout;
-		game.$timeout = setTimeout(() => {
-			delete games[ chatId ];
-			bot.sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
-		}, timeout_s * 1000 );
-		game.$timeouts = [ game.$timeout ];
-
-		
-		if (timeout_s > 20) {
-			game.$timeouts.push( setTimeout(() => {
-				bot.sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
-			}, (timeout_s - 5) * 1000 ));
-		}
-
-		bot.sendMessage( chatId, `Ajastettu päättymään ${ timeout_s } sekunnin kuluttua`, { disable_notification: true } );
-	}
-
-	return bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
-
-	new Promise(( resolve, reject ) => {
-		try {
-			const canvas = require( "./StrArrToImage.js" )( game.board );
-
-			bot.sendPhoto( chatId, canvas.createPNGStream(), {}, { contentType: "image/png" }).then(resolve).catch(reject);
-		} catch( err ) { reject( err ); }
-	}).then( response => {
-		console.log("hereiam", response);
-	}).catch( err => {
-		console.error( err );
-
-		return bot.sendMessage( chatId, "```\n" + game.toString() + "```", { parse_mode: "Markdown" });
-	}).then( response => {
-		console.log( "hereiam2", response );
-	});
-}
-handleCmdPeli.parseOpts = opts => {
-	if (opts.size == null) opts.size = 5;
-	else if (typeof opts.size != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
-
-
-	if (opts.timeout == null) opts.timeout = Infinity;
-	else if (typeof opts.timeout != "number" || opts.timeout <= 0 || !isFinite(opts.timeout)) throw "Invalid argument opts.timeout";
-
-
-	if (opts.chars == null) opts.chars  = "fin"; 
-	else if (typeof opts.chars != "string" || opts.chars.length == 0) throw "Invalid argument opts.chars";
-
-	opts.chars = opts.chars.toLowerCase().replace( /[^\wåäö]/g, "");
-};
-
-/************************************************/
-
 /**
  * @param {number} [opts.size=5]           - Käytetyn laudan koko
  * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
@@ -277,13 +287,13 @@ handleCmdPeli.parseOpts = opts => {
  * @param {string} [opts.chars=fin]        - Käytetty kirjaimisto tai sen koodi
  */
 function handleCmdKisa( msg, opts ) {
-	console.debug( "handleCmdKisa( msg, opts ) ::", msg, opts );
+	console.debug( "handleCmdKisa( msg, opts ) ::", arguments );
 
 	handleCmdKisa.parseOpts( opts );
 
 	const chatId = msg.chat.id;
 	
-	if (games[ chatId ]) return bot.sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
 
 	return console.debug( opts );
 }
@@ -300,15 +310,28 @@ handleCmdKisa.parseOpts = opts => {
 
 /************************************************/
 
+/**
+ */
+bot.onText(/\/stop/, (msg, match) => {
+	console.debug( "bot.onText(\/stop, ( msg, match )) :: ", msg, match );
+	try {
+		handleCmdStop( msg, match );
+	} catch( err ) {
+		console.error( "ERROR at bot.onText(\/stop) ::", err );
+	}
+});
+
 function handleCmdStop( msg, match ) {
+	console.debug( "handleCmdStop( msg, opts ) ::", arguments );
+
 	const chatId = msg.chat.id;
 	const game = games[ chatId ];
 
-	if (!game) return bot.sendMessage( chatId, "Ei peliä, joka lopettaa!", { disable_notification: true } );
+	if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!", { disable_notification: true } );
 
-	if (game.$timeout) for (var timeout of game.$timeouts) clearTimeout( timeout );
+	for (var timeout of game.$timeouts) clearTimeout( timeout );
 
 	delete games[ chatId ];
 
-	bot.sendMessage( chatId, "Peli lopetettu!", { disable_notification: true } );
+	sendMessage( chatId, "Peli lopetettu!", { disable_notification: true } );
 }
