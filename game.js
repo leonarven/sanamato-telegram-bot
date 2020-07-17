@@ -63,7 +63,7 @@ class GameAbstract {
 	static getScores( game ) {
 		var players = game.players;
 		var scores = {};
-		var words = {};
+		var all_words = {};
 		var chars = [];
 		game.board.forEach( row => row.forEach( char => {
 			if (chars.indexOf( char ) == -1) chars.push( char );
@@ -96,14 +96,14 @@ class GameAbstract {
 				if (paths.length > 0) {
 					scores[id].founds[ word ] = paths;
 
-					(words[ word ] = words[ word ] || []).push( id );
+					(all_words[ word ] = all_words[ word ] || []).push( id );
 				}
 			}
 			scores[id].words = Object.keys( scores[id].founds );
 		}
 
-		for (var word in words) {
-			if (words[word].length == 1) {
+		for (var word in all_words) {
+			if (all_words[word].length == 1) {
 				scores[id].uniques.push( word );
 			}
 		}

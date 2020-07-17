@@ -265,7 +265,7 @@ function handleCmdKisa( msg, opts ) {
 					for (var word in score.founds) {
 						var paths = score.founds[word];
 						for (var path of paths) {
-							score_txt += `\n${word} - ${ path }`;
+//							score_txt += `\n${word} - ${ path }`;
 						}
 					}
 				}
