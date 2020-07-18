@@ -8,21 +8,29 @@ class OfflineTelegramBot {
 	onText() {}
 }
 
-
+const chats = {};
 class Chat {
-	constructor( chatId, msgChat = {}) {
-		this.id   = chatId;
-		this.type = msgChat.type;
+	constructor( chat = {} ) {
+		for (var id in chat) this[id] = chat[id];
 
-		switch (this.type) {
-			case "private":
-				this.title = msgChat.username;
-				break;
-			default:
-				this.title = msgChat.title || chatId;
-		}
+		Object.defineProperty( this, 'title', {
+			get: () => {
+				switch (this.type) {
+					case "private": return this.username;
+				}
+				return this.id;
+			}
+		});
 
 		console.debug( "new Chat() ::", this );
+	}
+
+	static get( chat = {} ){
+		if (typeof chat == "string" || typeof chat == "number") return chats[ chat ];
+
+		if (typeof chat != "object" || !chat.id) return null;
+
+		return (chats[ chat.id ] = chats[ chat.id ] || new Chat( chat ));
 	}
 }
 

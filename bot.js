@@ -3,8 +3,7 @@ const OfflineTelegramBot = require( './OfflineTelegramBot' );
 
 const { GameAbstract } = require( './game.js' );
 
-const Chat = OfflineTelegramBot.Chat;
-const chats = {};
+const { Chat } = OfflineTelegramBot;
 const games = {};
 
 const argv  = require('minimist')(process.argv.slice(2));
@@ -26,11 +25,11 @@ bot.on('polling_error', err => {
 
 bot.on('text', msg => {
 	const chatId = msg.chat && msg.chat.id || null;
+	const chat = msg.chat = Chat.get( msg.chat );
 
 	if (chatId) {
-		if (!chats[ chatId ]) chats[ chatId ] = new Chat( chatId, msg.chat );
-
 		const game = games[ chatId ];
+
 		if (game) {
 			console.debug( "bot.on('text', (msg)) ::", msg );
 
@@ -125,27 +124,36 @@ bot.onText(/\/stop/, (msg, match) => {
 		const chatId = msg.chat.id;
 		const game = games[ chatId ];
 
-		if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!", { disable_notification: true } );
+		if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!" );
 
 		for (var timeout of game.$timeouts) clearTimeout( timeout );
 
 		delete games[ chatId ];
 
-		sendMessage( chatId, "Peli keskeytetty!", { disable_notification: true } );
+		sendMessage( chatId, "Peli keskeytetty!" );
 	}
 });
 
 
 
 
-function sendMessage( chatId ) {
+function sendMessage( chatId, message, opts = {} ) {
+	if (typeof opts.disable_notification == "undefined") opts.disable_notification = true; 
+
+	if (chatId instanceof Chat) chatId = chatId.id;
+	
 	console.debug( "sendMessage() ::", arguments );
 
 	if (chatId == null) {
 		return Promise.resolve( console.log( "sendMessage() :: Message not sended, no chatId" ));
-	} else {
-		return bot.sendMessage.apply( bot, arguments );
 	}
+
+
+	if (!Array.isArray( message )) message = [ message ];
+	
+	return message.forEach(( msg, i ) => {
+		setTimeout(() => bot.sendMessage( chatId, msg, opts ), 10*parseInt(i) );
+	});
 }
 
 /*************************************/
@@ -163,24 +171,24 @@ function handleCmdPeli( msg, opts ) {
 
 	const chatId = msg.chat.id;
 
-	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.` );
 	
 	if (isFinite( opts.timeout ) && opts.timeout > 0) {
 		opts.timeoutFn = () => {
 			delete games[ chatId ];
-			sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
+			sendMessage( chatId, `Aika loppui! Peli päättyi.` );
 		};
 		opts.timeoutFn.tMinus = {
 			5: () => {
-				sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
+				sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!` );
 			}
 		};
-		sendMessage( chatId, `Ajastetaan peli päättymään ${ opts.timeout } sekunnin kuluttua`, { disable_notification: true } );
+		sendMessage( chatId, `Ajastetaan peli päättymään ${ opts.timeout } sekunnin kuluttua`);
 	}
 
 	const game = games[ chatId ] = new GameAbstract( opts );
 
-	sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!\n`+"```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
+	sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!\n`+"```\n" + game.toString() + "```", { parse_mode: "Markdown" });
 
 //	new Promise(( resolve, reject ) => {
 //		try {
@@ -201,6 +209,7 @@ function handleCmdPeli( msg, opts ) {
 handleCmdPeli.parseOpts = opts => {
 	if (opts.size == null) opts.size = 5;
 	else if (typeof opts.size != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
+	if (opts.size > 10) throw `Virheellinen asetus. Laudan sivun pituus voi olla korkeintaan 10 merkkiä (${ opts.size } > 10).`;
 
 
 	if (opts.timeout == null) opts.timeout = Infinity;
@@ -216,73 +225,97 @@ handleCmdPeli.parseOpts = opts => {
 /************************************************/
 
 /**
- * @param {number} [opts.size=5]           - Käytetyn laudan koko
- * @param {number} [opts.timeout=Infinity] - Kierroksen pituus
- * @param {number} [opts.rounds=1]         - Kierrosten lukumäärä
- * @param {number} [opts.delay=Infinity]   - Kierrosten välinen aika
- * @param {string} [opts.chars=FIN]        - Käytetty kirjaimisto tai sen koodi
+ * @param {number}  [opts.size=5]               - Käytetyn laudan koko
+ * @param {number}  [opts.timeout=Infinity]     - Kierroksen pituus
+ * @param {number}  [opts.rounds=1]             - Kierrosten lukumäärä
+ * @param {number}  [opts.delay=Infinity]       - Kierrosten välinen aika
+ * @param {string}  [opts.chars=FIN]            - Käytetty kirjaimisto tai sen koodi
+ * @param {boolean} [opts.disable_scores=false] - Jätetäänkö pisteidenlasku toteuttamatta
  */
 function handleCmdKisa( msg, opts ) {
 	console.debug( "handleCmdKisa( msg, opts ) ::", arguments );
 
 	const chatId = msg.chat.id;
+	const chat = Chat.get( msg.chat.id );
 	
-	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.`, { disable_notification: true } );
+	if (games[ chatId ]) return sendMessage( chatId, `Peli on jo käynnissä, aloitettu ${ games[ chatId ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.` );
 
 	handleCmdKisa.parseOpts( opts );
 	
-	if (opts.timeout == null || !isFinite(opts.timeout)) throw "Not implemented yet! (opts.timeout unsetted)"; 
-
+	if (opts.timeout == null || !isFinite(opts.timeout)) throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
 
 	iterateRound();
 
 	function iterateRound() {
 		if (isFinite( opts.timeout ) && opts.timeout > 0) {
-			opts.timeoutFn = () => {
-				var game   = games[ chatId ];
-				var scores = game.getScores();
-
+			opts.timeoutFn = game => {
 				console.log( "Scores:", scores );
-				delete games[ chatId ];
+				delete games[ game.chat.id ];
 
-				sendMessage( chatId, `Aika loppui! Peli päättyi.`, { disable_notification: true } );
+				sendMessage( game.chat.id, `Aika loppui! Peli päättyi.` );
 
-				var score_txt = "";
-				for (var id in scores) {
-					var score = scores[id];
-					score_txt += `\n\n${ game.players[id].label }, `;
-					
-					if (Object.keys( scores ).length == 1) {
-						score_txt += `${ score.words.length } sanaa.`;
-					} else {
-						if (score.words.length == score.uniques.length) {
-							score_txt += `${ score.words.length } sanaa, kaikki uniikkeja.`;
+				if (!opts.disable_scores) { 
+					var scores = game.getScores(), score_txts = [];
+
+					console.debug( "iterateRound() :: scores", scores);
+
+					for (var id in scores) {
+						var score_txt = "";
+						var score = scores[id];
+						var words = score.words;
+						score_txt += "\n\n@" + (game.players[id].username || `${ id } (${ game.players[id].label })`) + ", ";
+						
+						if (words.length == 0) {
+							score_txt += "ei löydettyjä sanoja."
+						} else if (words.length == 1) {
+							score_txt += `yksi löydetty sana, ${ words[0] }.`
 						} else {
-							score_txt += `${ score.words.length } sanaa, ${ score.uniques.length } uniikkia.`;
+							if (Object.keys( scores ).length == 1) {
+								score_txt += `${ words.length } sanaa.`;
+							} else {
+								if (score.words.length == score.uniques.length) {
+									score_txt += `${ words.length } sanaa, kaikki uniikkeja.`;
+								} else {
+									score_txt += `${ words.length } sanaa, ${ score.uniques.length } uniikkia.`;
+								}
+							}
+					
+							score_txt += `\n${ words[0] }`;
+							for (var c = words.length, i = c-1; i >= 1; i--) {
+								score_txt += (i==1 ? " ja " : ", ") + words[c-i];
+							}
+							score_txt += ".";
 						}
+
+						for (var word in score.founds) {
+							var paths = score.founds[word];
+							for (var path of paths) {
+	//							score_txt += `\n${word} - ${ path }`;
+							}
+						}
+						score_txts.push( score_txt );
 					}
 
-					for (var word in score.founds) {
-						var paths = score.founds[word];
-						for (var path of paths) {
-//							score_txt += `\n${word} - ${ path }`;
-						}
+					if (score_txts.length == 0) {
+						score_txts = "Kukaan ei pelannut :(";
+					} else {
+						score_txts.unshift( "Tulokset:" );
 					}
+
+					sendMessage( game.chat.id, score_txts );
 				}
-
-				sendMessage( chatId, "Tulokset:" + score_txt, { disable_notification: true } );
 			};
 			opts.timeoutFn.tMinus = {
-				5: () => {
-					sendMessage( chatId, `Aikaa jäljellä viisi sekuntia!`, { disable_notification: true } );
+				5: game => {
+					sendMessage( game.chat.id, `Aikaa jäljellä viisi sekuntia!` );
 				}
 			};
-			sendMessage( chatId, `Ajastetaan peli päättymään ${ opts.timeout } sekunnin kuluttua`, { disable_notification: true } );
+			sendMessage( chatId, `Ajastetaan peli päättymään ${ opts.timeout } sekunnin kuluttua` );
 		}
 
-		const game = games[ chatId ] = new GameAbstract( opts );
+		const game = games[ chatId ] = new GameAbstract( chat, opts );
 
-		sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!\n`+"```\n" + game.toString() + "```", { parse_mode: "Markdown", disable_notification: true });
+		sendMessage( chatId, `Peli aloitettu ${ game.ctime.toLocaleString() }!\n`+"```\n" + game.toString() + "```", { parse_mode: "Markdown" });
 	};
 }
 handleCmdKisa.parseOpts = opts => {

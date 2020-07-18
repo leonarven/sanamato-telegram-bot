@@ -3,8 +3,10 @@ const StringInMatrice    = require( './StringInMatrice' );
 const CHARS = require('./chars/fin.js')();
 
 class GameAbstract {
-	constructor( cnf = {} ) {
-		console.debug( "new GameAbstract( cnf ) ::", cnf );
+	constructor( chat = null, cnf = {} ) {
+		console.debug( "new GameAbstract( chat, cnf ) ::", arguments );
+
+		this.chat = chat;
 
 		this.w = cnf.w || cnf.size || 5;
 		this.h = cnf.h || cnf.size || 5;
@@ -37,10 +39,12 @@ class GameAbstract {
 
 		this.$timeouts = [];
 		if (isFinite( cnf.timeout ) && cnf.timeout > 0 && typeof cnf.timeoutFn == "function") {
-			this.$timeouts.push( setTimeout( cnf.timeoutFn, 1000 * cnf.timeout ));
+			this.$timeouts.push( setTimeout( cnf.timeoutFn, 1000 * cnf.timeout, this ));
+
 			for (var tMinus in cnf.timeoutFn.tMinus) {
-				if (typeof cnf.timeoutFn.tMinus[tMinus] == "function") {
-					this.$timeouts.push( setTimeout( cnf.timeoutFn.tMinus[tMinus], 1000 * (cnf.timeout - parseInt( tMinus ))));
+				var tDelta = 1000 * (cnf.timeout - parseInt( tMinus ));
+				if (typeof cnf.timeoutFn.tMinus[tMinus] == "function" && tDelta > 0) {
+					this.$timeouts.push( setTimeout( cnf.timeoutFn.tMinus[tMinus], tDelta, this ));
 				}
 			}
 		}
@@ -70,7 +74,7 @@ class GameAbstract {
 		}));
 		var chars_regexp = new RegExp( "^(["+chars.join("").toUpperCase()+"]+)$");
 
-		console.debug( "getKisaScores() :: regexp", chars_regexp);
+		console.debug( "getScores() :: regexp", chars_regexp);
 
 		for (var id in players) {
 			var words = [];
@@ -93,14 +97,18 @@ class GameAbstract {
 			scores[id] = { uniques: [], founds: {} };
 			for (var word of words) {
 				var paths = Object.keys( StringInMatrice( word, game.board ));
+
 				if (paths.length > 0) {
 					scores[id].founds[ word ] = paths;
 
-					(all_words[ word ] = all_words[ word ] || []).push( id );
+					if (!all_words[word]) all_words[word] = [ id ];
+					else all_words[word].push( id );
 				}
 			}
-			scores[id].words = Object.keys( scores[id].founds );
+			scores[id].words = Object.keys( scores[id].founds ).sort(( a, b ) => ( a.localeCompare( b, "sv" )));
 		}
+
+		console.debug( "getScores() :: all_words", all_words);
 
 		for (var word in all_words) {
 			if (all_words[word].length == 1) {
