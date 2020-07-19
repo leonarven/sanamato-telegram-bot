@@ -7,11 +7,14 @@ const { Chat } = OfflineTelegramBot;
 const games = {};
 
 const argv  = require('minimist')(process.argv.slice(2));
-const token = argv.token;
+console.log("INIT :: argv:", argv );
 
-if (!token) throw "Missing parameter --token";
+const TOKEN     = (argv.token.trim());
+const ADMIN_IDS = (argv.admins || "").toString().split( "," ).map( id => id.trim() ).filter( id => id );
 
-const bot = new (require( argv.offline ? './OfflineTelegramBot' : 'node-telegram-bot-api' ))( token, { polling: true });
+if (!TOKEN) throw "Missing parameter --token";
+
+const bot = new (require( argv.offline ? './OfflineTelegramBot' : 'node-telegram-bot-api' ))( TOKEN, { polling: true });
 
 
 bot.on('polling_error', err => {
@@ -110,7 +113,7 @@ bot.onText(/^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)
 
 /**
  */
-bot.onText(/\/stop/, (msg, match) => {
+bot.onText(/^\/stop$/, (msg, match) => {
 	console.debug( "bot.onText(\/stop, ( msg, match )) :: ", msg, match );
 	try {
 		handleCmdStop( msg, match );
@@ -135,6 +138,28 @@ bot.onText(/\/stop/, (msg, match) => {
 });
 
 
+(manual => {
+	bot.onText(/^\/help$/, msg => {
+		sendMessage( msg.chat.id, manual );
+	});
+})(`/peli - Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>).
+
+/kisa - Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>).
+
+/stop - Lopeta nykyinen peli.
+
+/help - Näytä tämä listaus.`);
+
+if (ADMIN_IDS.length > 0) { 
+	console.log( "INIT :: ADMIN_IDS > 0:", ADMIN_IDS );
+	console.log( "INIT :: Initializing /die" );
+	bot.onText(/^\/die$/, msg => {
+		if (process.uptime() > 2 && ADMIN_IDS.indexOf( msg.from.id.toString() ) != -1) {
+			sendMessage( msg.chat.id, "Minä menen nyt..." ).then(() => process.exit()).catch( err => { });
+		}
+	});
+}
+
 
 
 function sendMessage( chatId, message, opts = {} ) {
@@ -142,7 +167,7 @@ function sendMessage( chatId, message, opts = {} ) {
 
 	if (chatId instanceof Chat) chatId = chatId.id;
 	
-	console.debug( "sendMessage() ::", arguments );
+	console.log( "sendMessage() ::", arguments );
 
 	if (chatId == null) {
 		return Promise.resolve( console.log( "sendMessage() :: Message not sended, no chatId" ));
@@ -151,9 +176,16 @@ function sendMessage( chatId, message, opts = {} ) {
 
 	if (!Array.isArray( message )) message = [ message ];
 	
-	return message.forEach(( msg, i ) => {
-		setTimeout(() => bot.sendMessage( chatId, msg, opts ), 10*parseInt(i) );
-	});
+	return Promise.all( message.map(( msg, i ) => {
+		return new Promise(( resolve, reject ) => {
+			setTimeout(() => {
+				bot.sendMessage( chatId, msg, opts ).then( resolve ).catch( err => {
+					console.error( "ERROR@sendMessage() :: bot.sendMEssage got rejected:", err );
+					reject( err )
+				});
+			}, 10*parseInt(i));
+		});
+	}));
 }
 
 /*************************************/
