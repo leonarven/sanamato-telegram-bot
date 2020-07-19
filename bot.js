@@ -260,10 +260,11 @@ function runKisa( chat, opts ) {
 			game.stop();
 		};
 
-		opts.timeoutFn.tMinus = {
-			60 : game => chat.sendMessage( `Minuutti aikaa jäljellä.` ),
-			5  : game => chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` )
-		};
+		opts.timeoutFn.tMinus = { 5: game => chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` ) };
+
+		if (opts.timeout >= 120) opts.timeoutFn.tMinus[60]  = game => chat.sendMessage( `Yksi minuutti aikaa jäljellä.` );
+		if (opts.timeout >= 240) opts.timeoutFn.tMinus[120] = game => chat.sendMessage( `Kaksi minuuttia aikaa jäljellä.` );
+
 	} else {
 		throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
 	}
@@ -350,9 +351,7 @@ function runKisa( chat, opts ) {
 			if (opts.rounds > 1) {
 				if (round < opts.rounds) {
 					chat.sendMessage( `Seuraava kierros alkaa ${ opts.delay } sekunnin kuluttua.`, { parse_mode: 'HTML'} );
-					setTimeout(() => {
-						iterateRound( round+1, callback );
-					}, opts.delay * 1000 );
+					iterateRound( round+1, callback );
 				} else {
 					callback();
 				} 
@@ -363,23 +362,38 @@ function runKisa( chat, opts ) {
 	}
 
 	function runRound( round, callback ) {
+		var delay = 0;
+		if (round > 1 && opts.delay > 0) {
+			delay = opts.delay * 1000;
 
-		const game = games[ chat.id ] = new GameAbstract( chat, opts );
-		game.on( 'stop', function(){
-			delete games[ this.chat.id ];
-			callback( null, this );
-		});
-
-		var str = "Peli alkaa!";
-
-		if (opts.rounds > 1) {
-			str += `\nKierros *#${ round } / ${ opts.rounds }*`;
-		} else if (opts.rounds == 1) {
-			str += "\nPelataan yksi kierros";
+			// Yli 10s peleissä voidaan varoittaa etukäteen.
+			if (delay > 10000) {
+				setTimeout(() => {
+					chat.sendMessage("Peli jatkuu 5 sekunnin kuluttua!");
+				}, delay - 5000);
+			}
 		}
 
-		if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, kierros kestää *${ opts.timeout } sekuntia*`;
-		chat.sendMessage( str + ".\n```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+		setTimeout(() => {
+			var str = "*Peli alkaa!*";
+
+			if (opts.rounds > 1) {
+				str += `\nKierros *#${ round } / ${ opts.rounds }*`;
+			} else if (opts.rounds == 1) {
+				str += "\nPelataan yksi kierros";
+			}
+
+			if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, aikaa *${ opts.timeout } sekuntia*`;
+
+			setTimeout(() => {
+				const game = games[ chat.id ] = new GameAbstract( chat, opts );
+				game.on( 'stop', function(){
+					delete games[ this.chat.id ];
+					callback( null, this );
+				});
+				chat.sendMessage( str + ".\n```\n" + game.toString() + "```", { parse_mode: "Markdown" });
+			});
+		}, delay);
 	};
 
 	/********************************/
