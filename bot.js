@@ -22,8 +22,6 @@ function sendMessage( chatId, message, opts = {} ) {
 
 	if (chatId instanceof Chat) chatId = chatId.id;
 	else if (typeof chatId == "object" && typeof chatId.id != "undefined") chatId = chatId.id;
-	
-	console.log( "sendMessage() ::", arguments );
 
 	if (chatId == null) {
 		return Promise.resolve( console.log( "sendMessage() :: Message not sended, no chatId" ));
@@ -35,11 +33,12 @@ function sendMessage( chatId, message, opts = {} ) {
 	return Promise.all( message.map(( msg, i ) => {
 		return new Promise(( resolve, reject ) => {
 			setTimeout(() => {
+				console.log( "sendMessage( chatId, msg, opts ) ::", [ chatId, msg, opts ]);
 				bot.sendMessage( chatId, msg, opts ).then( resolve ).catch( err => {
 					console.error( "ERROR@sendMessage() :: bot.sendMessage got rejected:", err );
 					reject( err );
 				});
-			}, 100*parseInt(i));
+			}, 500*parseInt(i));
 		});
 	}));
 }
@@ -236,6 +235,7 @@ function runKisa( chat, opts ) {
 				chat.sendMessage( `Aika loppui, peli päättyi!` );
 			} else {
 				var scores = game.getScores(), score_txts = [];
+				var all_invalids = [];
 
 				console.log( "iterateRound() :: scores:", scores );
 
@@ -267,12 +267,17 @@ function runKisa( chat, opts ) {
 						score_txt += ".";
 					}
 
+					for (var word of score.invalids) {
+						if (all_invalids.indexOf( word ) == -1) all_invalids.push( word );
+					}
+
 					for (var word in score.founds) {
 						var paths = score.founds[word];
 						for (var path of paths) {
 //							score_txt += `\n${word} - ${ path }`;
 						}
 					}
+
 					score_txts.push( score_txt );
 				}
 
@@ -280,6 +285,12 @@ function runKisa( chat, opts ) {
 					score_txts.unshift( "Aika loppui, peli päättyi. Kukaan ei pelannut :(" );
 				} else {
 					score_txts.unshift( "Aika loppui, peli päättyi.\n<b>Tulokset:</b>" );
+				}
+
+				if (all_invalids.length == 1) {
+					score_txts.push( `Sanaa ${ all_invalids[0] } ei hyväksytty.`);
+				} else if (all_invalids.length > 1) {
+					score_txts.push( `Sanoja ${ all_invalids.join( ', ' ) } ei hyväksytty.`);
 				}
 
 				chat.sendMessage( score_txts, { parse_mode: 'HTML'} );

@@ -67,8 +67,10 @@ class GameAbstract {
 	static getScores( game ) {
 		var players = game.players;
 		var scores = {};
+
 		var all_words = {};
 		var chars = [];
+
 		game.board.forEach( row => row.forEach( char => {
 			if (chars.indexOf( char ) == -1) chars.push( char );
 		}));
@@ -77,6 +79,8 @@ class GameAbstract {
 		console.debug( "getScores() :: regexp", chars_regexp);
 
 		for (var id in players) {
+			scores[id] = { words: [], uniques: [], founds: {}, invalids: [] };
+
 			var words = [];
 			for (var msg of players[id].$msgs) {
 				try {
@@ -91,10 +95,12 @@ class GameAbstract {
 			}
 
 			// Siivotaan pois merkkijonot joissa on merkistön ulkopuolisia merkkejä
-			words = words.filter( word => chars_regexp.test( word ));
+			words = words.filter( word => {
+				if (chars_regexp.test( word )) return true;
+				scores[id].invalids.push( word );
+			});
 
 			// Parsitaan jäljelle vain sanat, jotka löytyvät matriisista
-			scores[id] = { uniques: [], founds: {} };
 			for (var word of words) {
 				var paths = Object.keys( StringInMatrice( word, game.board ));
 
@@ -103,8 +109,11 @@ class GameAbstract {
 
 					if (!all_words[word]) all_words[word] = [ id ];
 					else all_words[word].push( id );
+				} else {
+					scores[id].invalids.push( word );
 				}
 			}
+
 			scores[id].words = Object.keys( scores[id].founds ).sort(( a, b ) => ( a.localeCompare( b, "sv" )));
 		}
 
@@ -114,9 +123,6 @@ class GameAbstract {
 			if (all_words[word].length == 1) {
 				scores[id].uniques.push( word );
 			}
-		}
-
-		for (var id in scores) {
 		}
 		
 		return scores;
