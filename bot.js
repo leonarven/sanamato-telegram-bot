@@ -17,6 +17,11 @@ if (!TOKEN) throw "Missing parameter --token";
 const bot = new (require( argv.offline ? './OfflineTelegramBot' : 'node-telegram-bot-api' ))( TOKEN, { polling: true });
 
 
+const __messages = [];
+var __messageSendTimeout = null;
+
+__messages.push = function() { var ret = Array.prototype.push.apply( __messages, arguments ); setTimeout(__refreshMessageSends); return ret; };
+
 function sendMessage( chatId, message, opts = {} ) {
 	if (typeof opts.disable_notification == "undefined") opts.disable_notification = true; 
 
@@ -30,22 +35,29 @@ function sendMessage( chatId, message, opts = {} ) {
 
 	if (!Array.isArray( message )) message = [ message ];
 	
-	return Promise.all( message.map(( msg, i ) => {
-		return new Promise(( resolve, reject ) => {
-			setTimeout(() => {
-				console.log( "sendMessage( chatId, msg, opts ) ::", [ chatId, msg, opts ]);
-				bot.sendMessage( chatId, msg, opts ).then( resolve ).catch( err => {
-					console.error( "ERROR@sendMessage() :: bot.sendMessage got rejected:", err );
-					reject( err );
-				});
-			}, 500*parseInt(i));
-		});
-	}));
+	return message.forEach(( msg, i ) => __messages.push([ chatId, msg, opts ]));
+}
+function __refreshMessageSends() {
+	if (__messageSendTimeout) return;
+	if (__messages.length > 0) {
+		__messageSendTimeout = setTimeout(message => {
+			__messageSendTimeout = null;
+			
+			if (!message) return;
+
+			console.log( "sendMessage( chatId, msg, opts ) ::", message );
+		
+			bot.sendMessage.apply( bot, message ).then(() => {
+				/**/
+			}).catch( err => {
+				console.error( "ERROR@__refreshMessageSends()-cycle :: bot.sendMessage got rejected:", err, "message:", message );
+			}).finally( __refreshMessageSends );
+		}, 250, __messages.splice( 0, 1 )[0]);
+	} 
 }
 Chat.prototype.sendMessage = function( messages, opts ) {
 	return sendMessage( this.id, messages, opts );
 };
-
 
 bot.on('polling_error', err => {
 	console.error( "ERROR at bot.on(polling_error) ::", err );
@@ -171,14 +183,9 @@ bot.onText(/^\/stop$/, (msg, match) => {
 
 		if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!" );
 
-		game.stop();
-
-
-		//for (var timeout of game.$timeouts) clearTimeout( timeout );
-
-		//delete games[ chatId ];
-
 		sendMessage( chatId, "Peli keskeytetty!" );
+
+		game.stop();
 	}
 });
 
@@ -240,6 +247,14 @@ function runKisa( chat, opts ) {
 
 	parseOpts( opts );
 
+	if (opts.size > 10) {
+		throw `Virheellinen asetus. Laudan sivun pituus voi olla korkeintaan 10 merkkiä (${ opts.size } > 10).`;
+	}
+
+	if (opts.rounds > 1 && (typeof opts.delay != "number" || !isFinite( opts.delay ))) {
+		throw "Not implemented yet (opts.delay unsetted)!\nUseamman kierroksen kisaa ei voi käynnistää ilman aikavälin asettamista"; 
+	}
+
 	if (isFinite( opts.timeout ) && opts.timeout > 0) {
 		opts.timeoutFn = game => {
 			game.stop();
@@ -249,11 +264,15 @@ function runKisa( chat, opts ) {
 			60 : game => chat.sendMessage( `Minuutti aikaa jäljellä.` ),
 			5  : game => chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` )
 		};
+	} else {
+		throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
 	}
 
-	iterateRound();
+	iterateRound( 1, () => {
+		chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
+	});
 
-	function iterateRound( round = 0 , callback = ()=>{} ) {
+	function iterateRound( round = 1 , callback ) {
 		runRound( round, ( err, game ) => {
 			console.log("runRound.callback()");
 
@@ -314,7 +333,7 @@ function runKisa( chat, opts ) {
 				}
 
 				if (score_txts.length == 0) {
-					score_txts.unshift( "Aika loppui, peli päättyi. Kukaan ei pelannut :(" );
+					score_txts.unshift( "Aika loppui, peli päättyi. Kukaan ei pelannut " + String.fromCodePoint( 0x1F636 ));
 				} else {
 					score_txts.unshift( "Aika loppui, peli päättyi.\n<b>Tulokset:</b>" );
 				}
@@ -328,29 +347,38 @@ function runKisa( chat, opts ) {
 				chat.sendMessage( score_txts, { parse_mode: 'HTML'} );
 			}
 
-			if (opts.rounds > 1 && round < opts.rounds) {
-				chat.sendMessage( "Seuraava kierros alkaa joskus", { parse_mode: 'HTML'} );
+			if (opts.rounds > 1) {
+				if (round < opts.rounds) {
+					chat.sendMessage( `Seuraava kierros alkaa ${ opts.delay } sekunnin kuluttua.`, { parse_mode: 'HTML'} );
+					setTimeout(() => {
+						iterateRound( round+1, callback );
+					}, opts.delay * 1000 );
+				} else {
+					callback();
+				} 
+			} else {
+				callback(); 
 			}
 		});
 	}
 
-	function runRound( round = 0, callback = ()=>{} ) {
+	function runRound( round, callback ) {
 
 		const game = games[ chat.id ] = new GameAbstract( chat, opts );
 		game.on( 'stop', function(){
-			delete games[ this.id ];
+			delete games[ this.chat.id ];
 			callback( null, this );
 		});
 
 		var str = "Peli alkaa!";
 
 		if (opts.rounds > 1) {
-			str += ` **Kierros #${ round }!**`;
-			str += `\nPelataan **${ opts.rounds } kierrosta**`;
+			str += `\nKierros *#${ round } / ${ opts.rounds }*`;
+		} else if (opts.rounds == 1) {
+			str += "\nPelataan yksi kierros";
 		}
-		else if (opts.rounds == 1)     str += "\nPelataan yksi kierros";
 
-		if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, ajastettu päättymään ${ opts.timeout } sekunnissa`;
+		if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, kierros kestää *${ opts.timeout } sekuntia*`;
 		chat.sendMessage( str + ".\n```\n" + game.toString() + "```", { parse_mode: "Markdown" });
 	};
 
@@ -359,14 +387,11 @@ function runKisa( chat, opts ) {
 	function parseOpts( opts ) {
 		if (opts.size == null) opts.size = 5;
 		else if (typeof opts.size != "number" || opts.size <= 0 || !isFinite(opts.size)) throw "Invalid argument opts.size";
-		if (opts.size > 10) throw `Virheellinen asetus. Laudan sivun pituus voi olla korkeintaan 10 merkkiä (${ opts.size } > 10).`;
 
 		/**/
 
 		if (opts.timeout == null) opts.timeout = Infinity;
 		else if (typeof opts.timeout != "number" || opts.timeout <= 0 || !isFinite(opts.timeout)) throw "Invalid argument opts.timeout";
-
-		if (opts.timeout == null || !isFinite(opts.timeout)) throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
 
 		/**/
 
