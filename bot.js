@@ -171,9 +171,12 @@ bot.onText(/^\/stop$/, (msg, match) => {
 
 		if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!" );
 
-		for (var timeout of game.$timeouts) clearTimeout( timeout );
+		game.stop();
 
-		delete games[ chatId ];
+
+		//for (var timeout of game.$timeouts) clearTimeout( timeout );
+
+		//delete games[ chatId ];
 
 		sendMessage( chatId, "Peli keskeytetty!" );
 	}
@@ -239,7 +242,25 @@ function runKisa( chat, opts ) {
 
 	if (isFinite( opts.timeout ) && opts.timeout > 0) {
 		opts.timeoutFn = game => {
-			delete games[ game.chat.id ];
+			game.stop();
+		};
+
+		opts.timeoutFn.tMinus = {
+			60 : game => chat.sendMessage( `Minuutti aikaa jäljellä.` ),
+			5  : game => chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` )
+		};
+	}
+
+	iterateRound();
+
+	function iterateRound( round = 0 , callback = ()=>{} ) {
+		runRound( round, ( err, game ) => {
+			console.log("runRound.callback()");
+
+			if (err) {
+				console.error( "ERROR@runRound() ::", err );
+				return;
+			}
 
 			if (opts.disable_scores) {
 				chat.sendMessage( `Aika loppui, peli päättyi!` );
@@ -306,23 +327,29 @@ function runKisa( chat, opts ) {
 
 				chat.sendMessage( score_txts, { parse_mode: 'HTML'} );
 			}
-		};
 
-		opts.timeoutFn.tMinus = {
-			5: game => {
-				chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` );
+			if (opts.rounds > 1 && round < opts.rounds) {
+				chat.sendMessage( "Seuraava kierros alkaa joskus", { parse_mode: 'HTML'} );
 			}
-		};
+		});
 	}
 
+	function runRound( round = 0, callback = ()=>{} ) {
 
-
-	iterateRound();
-
-	function iterateRound() {
 		const game = games[ chat.id ] = new GameAbstract( chat, opts );
+		game.on( 'stop', function(){
+			delete games[ this.id ];
+			callback( null, this );
+		});
 
-		var str = "Peli aloitettu " + game.ctime.toLocaleString();
+		var str = "Peli alkaa!";
+
+		if (opts.rounds > 1) {
+			str += ` **Kierros #${ round }!**`;
+			str += `\nPelataan **${ opts.rounds } kierrosta**`;
+		}
+		else if (opts.rounds == 1)     str += "\nPelataan yksi kierros";
+
 		if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, ajastettu päättymään ${ opts.timeout } sekunnissa`;
 		chat.sendMessage( str + ".\n```\n" + game.toString() + "```", { parse_mode: "Markdown" });
 	};

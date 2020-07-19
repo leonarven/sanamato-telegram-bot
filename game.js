@@ -1,9 +1,13 @@
+const EventEmitter = require('events');
+
 const StringInMatrice    = require( './StringInMatrice' );
 
 const CHARS = require('./chars/fin.js')();
 
-class GameAbstract {
+class GameAbstract extends EventEmitter {
 	constructor( chat = null, cnf = {} ) {
+		super();
+
 		console.debug( "new GameAbstract( chat, cnf ) ::", arguments );
 
 		this.chat = chat;
@@ -50,6 +54,12 @@ class GameAbstract {
 		}
 
 		console.debug( "GameAbstract() ::", this );
+	}
+
+	stop() {
+		for (var timeout of this.$timeouts) clearTimeout( timeout );
+		
+		this.emit( 'stop' );
 	}
 
 	toString( opts = {} ) {
