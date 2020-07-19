@@ -242,7 +242,7 @@ function runKisa( chat, opts ) {
 				for (var id in scores) {
 					var score_txt = "";
 					var score = scores[id];
-					var words = score.words;
+					var words = score.words.map( word => `<i>${ word.toLowerCase() }</i>` );
 					score_txt += "\n\n@" + (game.players[id].username || `${ id } (${ game.players[id].label })`) + ", ";
 					
 					if (words.length == 0) {
@@ -254,9 +254,9 @@ function runKisa( chat, opts ) {
 							score_txt += `${ words.length } sanaa.`;
 						} else {
 							if (score.words.length == score.uniques.length) {
-								score_txt += `${ words.length } sanaa, kaikki uniikkeja.`;
+								score_txt += `<b>${ words.length } sanaa, kaikki uniikkeja.</b>`;
 							} else {
-								score_txt += `${ words.length } sanaa, ${ score.uniques.length } uniikkia.`;
+								score_txt += `<b>${ words.length } sanaa, ${ score.uniques.length } uniikkia.</b>`;
 							}
 						}
 				
@@ -270,6 +270,7 @@ function runKisa( chat, opts ) {
 					for (var word of score.invalids) {
 						if (all_invalids.indexOf( word ) == -1) all_invalids.push( word );
 					}
+					all_invalids = all_invalids.map( word => `<i>${ word.toLowerCase() }</i>` );
 
 					for (var word in score.founds) {
 						var paths = score.founds[word];
