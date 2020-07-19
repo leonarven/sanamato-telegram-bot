@@ -121,7 +121,7 @@ class GameAbstract {
 
 		for (var word in all_words) {
 			if (all_words[word].length == 1) {
-				scores[id].uniques.push( word );
+				scores[ all_words[word][0] ].uniques.push( word );
 			}
 		}
 		
