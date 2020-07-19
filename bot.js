@@ -1,62 +1,23 @@
-const        TelegramBot = require( 'node-telegram-bot-api' );
-const OfflineTelegramBot = require( './OfflineTelegramBot' );
-
+const { TelegramBot, OfflineTelegramBot, MessageSender, Chat } = require( './TelegramBot.js' );
 const { GameAbstract } = require( './game.js' );
 
-const { Chat } = OfflineTelegramBot;
 const games = {};
+
 
 const argv  = require('minimist')(process.argv.slice(2));
 console.log("INIT :: argv:", argv );
+
 
 const TOKEN     = (argv.token.trim());
 const ADMIN_IDS = (argv.admins || "").toString().split( "," ).map( id => id.trim() ).filter( id => id );
 
 if (!TOKEN) throw "Missing parameter --token";
 
-const bot = new (require( argv.offline ? './OfflineTelegramBot' : 'node-telegram-bot-api' ))( TOKEN, { polling: true });
-
-
-const __messages = [];
-var __messageSendTimeout = null;
-
-__messages.push = function() { var ret = Array.prototype.push.apply( __messages, arguments ); setTimeout(__refreshMessageSends); return ret; };
-
-function sendMessage( chatId, message, opts = {} ) {
-	if (typeof opts.disable_notification == "undefined") opts.disable_notification = true; 
-
-	if (chatId instanceof Chat) chatId = chatId.id;
-	else if (typeof chatId == "object" && typeof chatId.id != "undefined") chatId = chatId.id;
-
-	if (chatId == null) {
-		return Promise.resolve( console.log( "sendMessage() :: Message not sended, no chatId" ));
-	}
-
-
-	if (!Array.isArray( message )) message = [ message ];
-	
-	return message.forEach(( msg, i ) => __messages.push([ chatId, msg, opts ]));
-}
-function __refreshMessageSends() {
-	if (__messageSendTimeout) return;
-	if (__messages.length > 0) {
-		__messageSendTimeout = setTimeout(message => {
-			__messageSendTimeout = null;
-			
-			if (!message) return;
-
-			console.log( "sendMessage( chatId, msg, opts ) ::", message );
-		
-			bot.sendMessage.apply( bot, message ).then(() => {
-				/**/
-			}).catch( err => {
-				console.error( "ERROR@__refreshMessageSends()-cycle :: bot.sendMessage got rejected:", err, "message:", message );
-			}).finally( __refreshMessageSends );
-		}, 250, __messages.splice( 0, 1 )[0]);
-	} 
-}
+const bot = new (argv.offline ? OfflineTelegramBot : TelegramBot )( TOKEN, { polling: true });
+const messageSender = new MessageSender( bot );
+console.log( messageSender );
 Chat.prototype.sendMessage = function( messages, opts ) {
-	return sendMessage( this.id, messages, opts );
+	return messageSender.sendMessage( this.id, messages, opts );
 };
 
 bot.on('polling_error', err => {
@@ -110,7 +71,7 @@ bot.on('text', msg => {
 		console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
 
 		try {
-			return sendMessage( msg.chat.id, "/peli toistaiseksi poissa käytöstä." );
+			return msg.chat.sendMessage( "/peli toistaiseksi poissa käytöstä." );
 
 			handleCmdPeli( msg, {
 				size:    match[1] == null ? 5     : parseInt(match[1]),
@@ -119,7 +80,7 @@ bot.on('text', msg => {
 			});
 		} catch( err ) {
 			console.error( "ERROR at bot.onText(\/start) ::", err );
-			sendMessage( msg.chat.id, `Virhe komennon käsittelyssä!\n${ err }`);
+			msg.chat.sendMessage( `Virhe komennon käsittelyssä!\n${ err }`);
 		}
 	});
 })();
@@ -156,7 +117,7 @@ bot.on('text', msg => {
 			});
 		} catch( err ) {
 			console.error( "ERROR at bot.onText(\/start) ::", err );
-			sendMessage( msg.chat.id, `Virhe komennon käsittelyssä!\n${ err }`);
+			msg.chat.sendMessage( `Virhe komennon käsittelyssä!\n${ err }`);
 		}
 	});
 })();
@@ -178,12 +139,12 @@ bot.onText(/^\/stop$/, (msg, match) => {
 	function handleCmdStop( msg, match ) {
 		console.debug( "handleCmdStop( msg, opts ) ::", arguments );
 
-		const chatId = msg.chat.id;
-		const game = games[ chatId ];
+		const chat = msg.chat;
+		const game = games[ chat.id ];
 
-		if (!game) return sendMessage( chatId, "Ei peliä, joka lopettaa!" );
+		if (!game) return chat.sendMessage( "Ei peliä, joka lopettaa!" );
 
-		sendMessage( chatId, "Peli keskeytetty!" );
+		chat.sendMessage( "Peli keskeytetty!" );
 
 		game.stop();
 	}
@@ -196,7 +157,7 @@ bot.onText(/^\/stop$/, (msg, match) => {
 (manual => {
 	console.log( "INIT :: Initializing /help" );
 	bot.onText(/^\/help$/, msg => {
-		sendMessage( msg.chat.id, manual );
+		msg.chat.sendMessage( manual );
 	});
 })(`/peli - Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>).
 
@@ -215,7 +176,7 @@ if (ADMIN_IDS.length > 0) {
 	console.log( "INIT :: Initializing /die" );
 	bot.onText(/^\/die$/, msg => {
 		if (process.uptime() > 2 && ADMIN_IDS.indexOf( msg.from.id.toString() ) != -1) {
-			sendMessage( msg.chat.id, "Minä menen nyt..." ).then(() => process.exit()).catch( err => { });
+			msg.chat.sendMessage( "Minä menen nyt..." ).then(() => process.exit()).catch( err => { });
 		}
 	});
 }
@@ -226,7 +187,7 @@ if (ADMIN_IDS.length > 0) {
 (() => {
 	console.log( "INIT :: Initializing /echo" );
 	bot.onText(/^\/echo\s+(.+)/, (msg, match) => {
-		sendMessage( msg.chat, match[1]);
+		msg.chat.sendMessage( match[1] );
 	});
 })();
 
@@ -243,7 +204,7 @@ if (ADMIN_IDS.length > 0) {
 function runKisa( chat, opts ) {
 	console.debug( "handleCmdKisa( chat, opts ) ::", arguments );
 
-	if (games[ chat.id ]) return sendMessage( chat.id, `Peli on jo käynnissä, aloitettu ${ games[ chat.id ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.` );
+	if (games[ chat.id ]) return chat.sendMessage( `Peli on jo käynnissä, aloitettu ${ games[ chat.id ].ctime.toLocaleString() }! Komenna /stop lopettaaksesi.` );
 
 	parseOpts( opts );
 
