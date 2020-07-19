@@ -210,6 +210,16 @@ if (ADMIN_IDS.length > 0) {
 	});
 }
 
+/**
+ */
+
+(() => {
+	console.log( "INIT :: Initializing /echo" );
+	bot.onText(/^\/echo\s+(.+)/, (msg, match) => {
+		sendMessage( msg.chat, match[1]);
+	});
+})();
+
 /************************************************/
 
 /**
