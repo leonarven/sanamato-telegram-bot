@@ -1,12 +1,9 @@
 class OfflineTelegramBot {
-	constructor( token, config ) {
-
-	}
-
+	constructor( token, config ) {}
 	on() {}
-
 	onText() {}
 }
+
 
 const chats = {};
 class Chat {
@@ -34,17 +31,17 @@ class Chat {
 	}
 }
 
+
+var __messageSendTimeout = null;
 class MessageSender {
 	constructor( bot ) {
 		var self = this;
 
 		this.bot = bot;
 
-		this.__messageSendTimeout = null;
-
-		const __messages = this.__messages = [];
-		__messages.push = message => {
-			var ret = Array.prototype.push.call( __messages, message );
+		Object.defineProperty( this, "__messages", { value: [] });
+		this.__messages.push = message => {
+			var ret = Array.prototype.push.call( this.__messages, message );
 			setTimeout(() => this.__sendMessageRefresh() );
 			return ret;
 		};
@@ -65,12 +62,9 @@ class MessageSender {
 	}
 
 	__sendMessageRefresh() {
-		console.debug( "__sendMessageRefresh() ::", this.__messages );
-
-		if (this.__messageSendTimeout) return;
-		if (this.__messages.length > 0) {
-			this.__messageSendTimeout = setTimeout( message => {
-				this.__messageSendTimeout = null;
+		if (!__messageSendTimeout && this.__messages.length > 0) {
+			__messageSendTimeout = setTimeout( message => {
+				__messageSendTimeout = null;
 				
 				if (!message) return;
 
@@ -83,6 +77,7 @@ class MessageSender {
 		} 
 	}
 }
+
 
 module.exports = {
 	TelegramBot: require( 'node-telegram-bot-api' ),
