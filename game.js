@@ -27,6 +27,8 @@ class GameAbstract extends EventEmitter {
 
 		console.debug( "new GameAbstract( chat, cnf ) ::", arguments );
 
+		GameAbstract.games[ chat.id ] = this;
+
 		this.chat = chat;
 
 		this.w = cnf.w || cnf.size || 5;
@@ -154,5 +156,6 @@ class GameAbstract extends EventEmitter {
 		return scores;
 	}
 }
+Game.games = {};
 
 module.exports = { GameAbstract, Score };

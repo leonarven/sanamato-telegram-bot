@@ -2,7 +2,6 @@ const { TelegramBot, OfflineTelegramBot, MessageSender, Chat } = require( './Tel
 const { GameAbstract, Score } = require( './game.js' );
 
 var Game = GameAbstract;
-Game.games = {};
 Game.get = ( chat = {} ) => {
 	if (typeof chat == "string" || typeof chat == "number") return Game.games[ chat ];
 
@@ -88,7 +87,7 @@ bot.addCommand( "echo", /^\/echo\s+(.+)/, (msg, match) => { msg.chat.sendMessage
 
 /**
  */
-bot.addCommand( "stop", null, (msg, match) => {
+bot.addCommand( "stop", null, async (msg, match) => {
 	const chat = msg.chat, game = Game.get( msg.chat );
 
 	if (chat.$$nextRoundTimeout) {
@@ -116,19 +115,20 @@ bot.addCommand( "stop", null, (msg, match) => {
  * @param {number} [match[2]=null] - Kierroksen pituus
  * @param {string} [match[3]=FIN]  - Käytetty kirjaimisto tai sen koodi
  *                       -> CMD       |timeout   |size      |chars */
-bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => {
+bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, async (msg, match) => {
 	if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
 
-	return Promise.resolve({
+	const opts = {
 		size:    match[1] == null ? 5     : parseInt(match[1]),
 		timeout: match[2] == null ? null  : parseInt(match[2]),
 		chars:   match[3] == null ? "FIN" : match[3],
 		disable_scores: true
-	}).then( opts => {
-		return runKisa( Chat.get( msg.chat.id ), opts ).then( () => {
-			msg.chat.sendMessage( "Peli päättyi, kiitos " + String.fromCodePoint( 0x1F60A ));
-		});
+	};
+
+	return runKisa( Chat.get( msg.chat.id ), opts ).then(() => {
+		msg.chat.sendMessage( "Peli päättyi, kiitos " + String.fromCodePoint( 0x1F60A ));
 	});
+
 }, "Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>)." );
 
 
@@ -147,59 +147,59 @@ bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (ms
  * @param {string} (match[5]=FIN) - Käytetty kirjaimisto tai sen koodi
  */
 //                       -> CMD       |size      |timeout   |rounds    |delay     |chars */
-bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
+bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, async (msg, match) => {
 	if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
 
-	return Promise.resolve({
+	const opts = {
 		size:    match[1] == null ? 5     : parseInt(match[1]),
 		timeout: match[2] == null ? 120   : parseInt(match[2]),
 		rounds:  match[3] == null ? 1     : parseInt(match[3]),
 		delay:   match[4] == null ? null  : parseInt(match[4]),
 		chars:   match[5] == null ? "FIN" : match[5]
-	}).then( opts => {
+	};
 
-		runKisa.parseOpts( opts );
+	runKisa.parseOpts( opts );
 
-		if (!(isFinite( opts.timeout ) && opts.timeout > 0)) {
-			throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
+	if (!(isFinite( opts.timeout ) && opts.timeout > 0)) {
+		throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
+	}
+
+	return runKisa( msg.chat, opts ).then( results => {
+		if (!opts.disable_scores && opts.rounds >= 1) {
+			var scores  = {};
+			results.forEach( game => {
+				for (var id in game.$scores) {
+					var score = game.$scores[ id ];
+					if (!scores[ id ]) scores[ id ] = {
+						words_count: 0, uniques_count: 0, invalids_count: 0, points: 0,
+						player: msg.chat.users[ id ] || chat.game.players[ id ]
+					};
+
+					scores[id].words_count    += score.words.length;
+					scores[id].uniques_count  += score.uniques.length;
+					scores[id].invalids_count += score.invalids.length;
+				}
+			});
+
+			for (var id in scores) {
+				scores[id].points = 0;
+
+				scores[id].points += scores[id].words_count    * 1;
+				scores[id].points += scores[id].uniques_count  * 1;
+				scores[id].points -= scores[id].invalids_count * 1;
+			}
+
+			Object.keys( scores ).sort(( a, b ) => ( a.points - b.points )).forEach(( id, i, ids ) => {
+				var score = scores[id], player = score.player;
+				var str   = `<b>${ player.label }, ${ score.points } piste${ score.points == 1 ? '' : 'ttä' }:</b>\n`;
+				str += `${ score.words_count } hyväksyttyä`;
+				if (ids.length > 1) str += `, ${ score.uniques_count } uniikkia`;
+				str += ` ja ${ score.invalids_count } hylättyä sanaa.`;
+				msg.chat.sendMessage( str, { parse_mode: "HTML" });
+			}); 
 		}
 
-		return runKisa( msg.chat, opts ).then( results => {
-			if (!opts.disable_scores && opts.rounds >= 1) {
-				var scores  = {};
-				results.forEach( game => {
-					for (var id in game.$scores) {
-						var score = game.$scores[ id ];
-						if (!scores[ id ]) scores[ id ] = {
-							words_count: 0, uniques_count: 0, invalids_count: 0, points: 0,
-							player: msg.chat.users[ id ] || chat.game.players[ id ]
-						};
-
-						scores[id].words_count    += score.words.length;
-						scores[id].uniques_count  += score.uniques.length;
-						scores[id].invalids_count += score.invalids.length;
-					}
-				});
-
-				for (var id in scores) {
-					scores[id].points = 0;
-
-					scores[id].points += scores[id].words_count    * 1;
-					scores[id].points += scores[id].uniques_count  * 1;
-					scores[id].points -= scores[id].invalids_count * 1;
-				}
-
-				Object.keys( scores ).sort(( a, b ) => ( a.points - b.points )).forEach(( id, i, ids ) => {
-					var score = scores[id], player = score.player;
-					var str   = `<b>${ player.label }, ${ score.points } piste${ score.points == 1 ? '' : 'ttä' }:</b>\n`;
-					str += `${ score.words_count } hyväksyttyä`;
-					if (ids.length > 1) str += `, ${ score.uniques_count } uniikkia`;
-					str += ` ja ${ score.invalids_count } hylättyä sanaa.`;
-					msg.chat.sendMessage( str, { parse_mode: "HTML" });
-				}); 
-			}
-			msg.chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
-		});
+		msg.chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
 	});
 }, "Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>)" );
 
@@ -219,7 +219,7 @@ bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\
  * @return Promise
  */
 async function runKisa( chat, opts ) {
-	var __games = [];
+	var games = [];
 
 	runKisa.parseOpts( opts );
 
@@ -232,21 +232,18 @@ async function runKisa( chat, opts ) {
 	}
 
 	if (isFinite( opts.timeout ) && opts.timeout > 0) {
-		opts.timeoutFn = game => {
-			game.stop();
-		};
+		opts.timeoutFn = game => game.stop();
 
 		opts.timeoutFn.tMinus = { 5: game => chat.sendMessage( `Aikaa jäljellä viisi sekuntia!` ) };
 
 		if (opts.timeout >= 120) opts.timeoutFn.tMinus[60]  = game => chat.sendMessage( `Yksi minuutti aikaa jäljellä.` );
 		if (opts.timeout >= 240) opts.timeoutFn.tMinus[120] = game => chat.sendMessage( `Kaksi minuuttia aikaa jäljellä.` );
-
 	}
 
 	return new Promise(( resolve, reject ) => {
 		iterateRound( 1, (err, result) => {
 			if (err) reject( err );
-			else resolve( __games );
+			else resolve( games );
 		});
 	});
 
@@ -259,7 +256,7 @@ async function runKisa( chat, opts ) {
 				return callback();
 			}
 		
-			__games.push( game );
+			games.push( game );
 
 			if (!opts.disable_scores) {
 				var scores = game.$scores = game.getScores(), score_txts = [];
@@ -366,7 +363,7 @@ async function runKisa( chat, opts ) {
 			if (isFinite( opts.timeout ) && opts.timeout > 0) str += `, aikaa *${ opts.timeout } sekuntia*`;
 
 			chat.$$nextRoundTimeout = setTimeout(() => {
-				const game = Game.games[ chat.id ] = new GameAbstract( chat, opts );
+				const game = new GameAbstract( chat, opts );
 
 				game.on( 'stop', function() {
 					delete Game.games[ this.chat.id ];
