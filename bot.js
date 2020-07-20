@@ -69,11 +69,10 @@ bot.on('text', msg => {
 	}
 });
 
+
 /**
  */
 if (ADMIN_IDS.length > 0) { 
-	console.log( "INIT :: ADMIN_IDS > 0:", ADMIN_IDS );
-	console.log( "INIT :: Initializing /die" );
 	bot.onText(/^\/die$/, msg => {
 		if (process.uptime() > 2 && ADMIN_IDS.indexOf( msg.from.id.toString() ) != -1) {
 			msg.chat.sendMessage( "Minä menen nyt..." ).then(() => process.exit()).catch( err => { });
@@ -81,12 +80,30 @@ if (ADMIN_IDS.length > 0) {
 	});
 }
 
+
 /**
  */
+bot.addCommand( "echo", /^\/echo\s+(.+)/, (msg, match) => { msg.chat.sendMessage( match[1] ); });
 
-bot.addCommand( "echo", /^\/echo\s+(.+)/, (msg, match) => {
-	msg.chat.sendMessage( match[1] );
-}, "" );
+
+/**
+ */
+bot.addCommand( "stop", null, (msg, match) => {
+	const chat = msg.chat, game = Game.get( msg.chat );
+
+	if (chat.$$nextRoundTimeout) {
+		clearTimeout( chat.$$nextRoundTimeout ); 
+	} else if (!game) {
+		return chat.sendMessage( "Ei peliä, joka lopettaa!" );
+	} 
+
+	if (game) {
+		game.$$abortKisa = true;
+		game.stop();
+	}
+
+	chat.sendMessage( "Peli keskeytetty!" );
+}, "Lopeta nykyinen peli" );
 
 
 /**
@@ -111,13 +128,8 @@ bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (ms
 		return runKisa( Chat.get( msg.chat.id ), opts ).then( () => {
 			msg.chat.sendMessage( "Peli päättyi, kiitos " + String.fromCodePoint( 0x1F60A ));
 		});
-	}).catch( err => {
-		console.error( "ERROR at bot.onText(\/start) ::", err );
-		msg.chat.sendMessage( `Virhe!\n${ err }`);
 	});
 }, "Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>)." );
-
-
 
 
 /**
@@ -136,11 +148,9 @@ bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (ms
  */
 //                       -> CMD       |size      |timeout   |rounds    |delay     |chars */
 bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
-	console.debug( "bot.onText(\/kisa, ( msg, match )) :: ", msg, match );
-
 	if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
 
-	Promise.resolve({
+	return Promise.resolve({
 		size:    match[1] == null ? 5     : parseInt(match[1]),
 		timeout: match[2] == null ? 120   : parseInt(match[2]),
 		rounds:  match[3] == null ? 1     : parseInt(match[3]),
@@ -190,36 +200,8 @@ bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\
 			}
 			msg.chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
 		});
-	}).catch( err => {
-		console.error( "ERROR at bot.onText(\/start) ::", err );
-		msg.chat.sendMessage( `Virhe!\n${ err }`);
 	});
 }, "Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>)" );
-
-
-/**
- */
-bot.addCommand( "stop", null, (msg, match) => {
-	doStopGame( msg.chat, Game.get( msg.chat ));
-
-	function doStopGame( chat, game ) {
-
-		if (chat.$$nextRoundTimeout) {
-			clearTimeout( chat.$$nextRoundTimeout ); 
-		} else if (!game) {
-			return chat.sendMessage( "Ei peliä, joka lopettaa!" );
-		} 
-
-		if (game) {
-			game.$$abortKisa = true;
-			game.stop();
-		}
-
-		chat.sendMessage( "Peli keskeytetty!" );
-	}
-}, "Lopeta nykyinen peli" );
-
-
 
 
 
@@ -237,8 +219,6 @@ bot.addCommand( "stop", null, (msg, match) => {
  * @return Promise
  */
 async function runKisa( chat, opts ) {
-	console.debug( "handleCmdKisa( chat, opts ) ::", arguments );
-
 	var __games = [];
 
 	runKisa.parseOpts( opts );
@@ -274,12 +254,12 @@ async function runKisa( chat, opts ) {
 		runRound( round, ( err, game ) => {
 			console.log("runRound.callback()");
 
-			__games.push( game );
-
 			if (err) {
 				console.error( "ERROR@runRound() ::", err );
-				return;
+				return callback();
 			}
+		
+			__games.push( game );
 
 			if (!opts.disable_scores) {
 				var scores = game.$scores = game.getScores(), score_txts = [];
@@ -344,23 +324,20 @@ async function runKisa( chat, opts ) {
 
 				chat.sendMessage( score_txts, { parse_mode: 'HTML'} );
 			}
-console.log(game);
+
 			if (opts.rounds > 1) {
 				if (round < opts.rounds) {
 					if (game.$$abortKisa) {
 						chat.sendMessage( `Kisa keskeytetty kierroksessa *#${ round } / ${ opts.rounds }*`, { parse_mode: 'Markdown' });
 						console.log("Aborting the kisa!");
-						return callback();
+					} else {
+						chat.sendMessage( `Seuraava kierros alkaa ${ opts.delay } sekunnin kuluttua.`, { parse_mode: 'HTML'} );
+						return iterateRound( round+1, callback );
 					}
-
-					chat.sendMessage( `Seuraava kierros alkaa ${ opts.delay } sekunnin kuluttua.`, { parse_mode: 'HTML'} );
-					iterateRound( round+1, callback );
-				} else {
-					callback();
 				} 
-			} else {
-				callback(); 
 			}
+
+			callback(); 
 		});
 	}
 
@@ -390,10 +367,12 @@ console.log(game);
 
 			chat.$$nextRoundTimeout = setTimeout(() => {
 				const game = Game.games[ chat.id ] = new GameAbstract( chat, opts );
-				game.on( 'stop', function(){
+
+				game.on( 'stop', function() {
 					delete Game.games[ this.chat.id ];
 					callback( null, this );
 				});
+
 				chat.sendMessage( str + ".\n```\n" + game.toString() + "```", { parse_mode: "Markdown" });
 			});
 		}

@@ -37,6 +37,7 @@ class TelegramBot extends (require( 'node-telegram-bot-api' )) {
 				}
 			}).catch( err => {
 				console.error( `ERROR @ bot.onText(\/${ cmd }) ::`, err );
+				msg.chat.sendMessage( `Virhe!\n${ err }`);
 				throw err;
 			});
 		});
