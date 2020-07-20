@@ -4,6 +4,23 @@ const StringInMatrice    = require( './StringInMatrice' );
 
 const CHARS = require('./chars/fin.js')();
 
+const whitespace_regexp = /[\s]+/g;
+
+class Score {
+	constructor( player = {} ) {
+		if (typeof player == "string" || typeof player == "number") player = { id: player };
+
+		this.player = player;
+		this.id     = player.id    || null;
+		this.label  = player.label || player.id || null;
+
+		this.founds   = {};
+		this.words    = [];
+		this.uniques  = [];
+		this.invalids = [];
+	}
+}
+
 class GameAbstract extends EventEmitter {
 	constructor( chat = null, cnf = {} ) {
 		super();
@@ -84,23 +101,22 @@ class GameAbstract extends EventEmitter {
 		game.board.forEach( row => row.forEach( char => {
 			if (chars.indexOf( char ) == -1) chars.push( char );
 		}));
+
 		var chars_regexp = new RegExp( "^(["+chars.join("").toUpperCase()+"]+)$");
 
 		console.debug( "getScores() :: regexp", chars_regexp);
 
 		for (var id in players) {
-			scores[id] = { words: [], uniques: [], founds: {}, invalids: [] };
+			scores[id] = new Score( players[id] ); // { words: [], uniques: [], founds: {}, invalids: [] };
 
 			var words = [];
 			for (var msg of players[id].$msgs) {
 				try {
-					var _words = msg.text.trim().toUpperCase().split( /[\s]+/g ).filter(word => word.length >= 2)
-		
-					for (word of _words) {
-						if (words.indexOf(word) == -1) {
+					msg.text.trim().toUpperCase().split( whitespace_regexp ).forEach( word => {
+						if (word.length >= 2 && words.indexOf(word) == -1) {
 							words.push(word);
 						}
-					}
+					});
 				} catch(e) {}
 			}
 
@@ -124,7 +140,7 @@ class GameAbstract extends EventEmitter {
 				}
 			}
 
-			scores[id].words = Object.keys( scores[id].founds ).sort(( a, b ) => ( a.localeCompare( b, "sv" )));
+			scores[id].words = Object.keys( scores[id].founds ).sort(( a, b ) => a.localeCompare( b, "sv" ));
 		}
 
 		console.debug( "getScores() :: all_words", all_words);
@@ -139,4 +155,4 @@ class GameAbstract extends EventEmitter {
 	}
 }
 
-module.exports = { GameAbstract };
+module.exports = { GameAbstract, Score };

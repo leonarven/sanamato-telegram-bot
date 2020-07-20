@@ -1,0 +1,25 @@
+{
+  "name": "sanamato-telegram-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bot.js",
+  "dependencies": {
+    "canvas": "^2.6.1",
+    "minimist": "^1.2.5",
+    "node-telegram-bot-api": "^0.50.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leonarven/sanamato-telegram-bot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/leonarven/sanamato-telegram-bot/issues"
+  },
+  "homepage": "https://github.com/leonarven/sanamato-telegram-bot#readme"
+}

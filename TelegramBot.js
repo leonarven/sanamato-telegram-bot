@@ -18,6 +18,8 @@ class Chat {
 				return this.id;
 			}
 		});
+		
+		Object.defineProperty( this, 'users', { value: {} });
 
 		console.debug( "new Chat() ::", this );
 	}
