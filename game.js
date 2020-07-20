@@ -156,6 +156,6 @@ class GameAbstract extends EventEmitter {
 		return scores;
 	}
 }
-Game.games = {};
+GameAbstract.games = {};
 
 module.exports = { GameAbstract, Score };
