@@ -84,29 +84,9 @@ if (ADMIN_IDS.length > 0) {
 /**
  */
 
-(() => {
-	console.log( "INIT :: Initializing /echo" );
-	bot.onText(/^\/echo\s+(.+)/, (msg, match) => {
-		msg.chat.sendMessage( match[1] );
-	});
-})();
-
-/**
- */
-(manual => {
-	console.log( "INIT :: Initializing /help" );
-	bot.onText(/^\/help$/, msg => {
-		msg.chat.sendMessage( manual );
-	});
-})(`/peli - Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>).
-
-/kisa - Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>).
-
-/stop - Lopeta nykyinen peli.
-
-/help - Näytä tämä listaus.`);
-
-
+bot.addCommand( "echo", /^\/echo\s+(.+)/, (msg, match) => {
+	msg.chat.sendMessage( match[1] );
+}, "" );
 
 
 /**
@@ -118,31 +98,24 @@ if (ADMIN_IDS.length > 0) {
  * @param {number} [match[1]=5]    - Käytetyn laudan koko
  * @param {number} [match[2]=null] - Kierroksen pituus
  * @param {string} [match[3]=FIN]  - Käytetty kirjaimisto tai sen koodi
- */
-(() => {
-//                          -> CMD       |timeout   |size      |chars */
-	const cmdMatchRegExp = /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/;
-	console.log( "INIT :: Initializing /peli,", cmdMatchRegExp );
-	bot.onText( cmdMatchRegExp, (msg, match) => {
-		console.debug( "bot.onText(\/start, ( msg, match )) :: ", msg, match );
+ *                       -> CMD       |timeout   |size      |chars */
+bot.addCommand( "peli", /^\/peli(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?\s*$/, (msg, match) => {
+	if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
 
-		if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
-
-		Promise.resolve({
-			size:    match[1] == null ? 5     : parseInt(match[1]),
-			timeout: match[2] == null ? null  : parseInt(match[2]),
-			chars:   match[3] == null ? "FIN" : match[3],
-			disable_scores: true
-		}).then( opts => {
-			return runKisa( Chat.get( msg.chat.id ), opts ).then( () => {
-				msg.chat.sendMessage( "Peli päättyi, kiitos " + String.fromCodePoint( 0x1F60A ));
-			});
-		}).catch( err => {
-			console.error( "ERROR at bot.onText(\/start) ::", err );
-			msg.chat.sendMessage( `Virhe!\n${ err }`);
+	return Promise.resolve({
+		size:    match[1] == null ? 5     : parseInt(match[1]),
+		timeout: match[2] == null ? null  : parseInt(match[2]),
+		chars:   match[3] == null ? "FIN" : match[3],
+		disable_scores: true
+	}).then( opts => {
+		return runKisa( Chat.get( msg.chat.id ), opts ).then( () => {
+			msg.chat.sendMessage( "Peli päättyi, kiitos " + String.fromCodePoint( 0x1F60A ));
 		});
+	}).catch( err => {
+		console.error( "ERROR at bot.onText(\/start) ::", err );
+		msg.chat.sendMessage( `Virhe!\n${ err }`);
 	});
-})();
+}, "Aloita yhden kierroksen peruspeli (parametrit: /peli <koko=5> <aika=120> <kirjaimisto=FIN>)." );
 
 
 
@@ -161,103 +134,90 @@ if (ADMIN_IDS.length > 0) {
  * @param {number} (match[4])     - Automaatiolla (jos asetettu) määritelty kierrosten välinen aika
  * @param {string} (match[5]=FIN) - Käytetty kirjaimisto tai sen koodi
  */
-(()=>{
-//                          -> CMD       |size      |timeout   |rounds    |delay     |chars */
-	const cmdMatchRegExp = /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/;
-	console.log( "INIT :: Initializing /kisa,", cmdMatchRegExp );
-	bot.onText( cmdMatchRegExp, (msg, match) => {
-		console.debug( "bot.onText(\/kisa, ( msg, match )) :: ", msg, match );
+//                       -> CMD       |size      |timeout   |rounds    |delay     |chars */
+bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(.+))?)?)?)?)?\s*$/, (msg, match) => {
+	console.debug( "bot.onText(\/kisa, ( msg, match )) :: ", msg, match );
 
-		if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
+	if (Game.get( msg.chat )) return msg.chat.sendMessage( `Peli on jo käynnissä. Komenna /stop lopettaaksesi.` );
 
-		Promise.resolve({
-			size:    match[1] == null ? 5     : parseInt(match[1]),
-			timeout: match[2] == null ? 120   : parseInt(match[2]),
-			rounds:  match[3] == null ? 1     : parseInt(match[3]),
-			delay:   match[4] == null ? null  : parseInt(match[4]),
-			chars:   match[5] == null ? "FIN" : match[5]
-		}).then( opts => {
+	Promise.resolve({
+		size:    match[1] == null ? 5     : parseInt(match[1]),
+		timeout: match[2] == null ? 120   : parseInt(match[2]),
+		rounds:  match[3] == null ? 1     : parseInt(match[3]),
+		delay:   match[4] == null ? null  : parseInt(match[4]),
+		chars:   match[5] == null ? "FIN" : match[5]
+	}).then( opts => {
 
-			runKisa.parseOpts( opts );
+		runKisa.parseOpts( opts );
 
-			if (!(isFinite( opts.timeout ) && opts.timeout > 0)) {
-				throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
-			}
+		if (!(isFinite( opts.timeout ) && opts.timeout > 0)) {
+			throw "Not implemented yet (opts.timeout unsetted)!\nAseta kisan kesto (esim. /kisa 6 120)"; 
+		}
 
-			return runKisa( msg.chat, opts ).then( results => {
-				if (!opts.disable_scores && opts.rounds >= 1) {
-					var scores  = {};
-					results.forEach( game => {
-						for (var id in game.$scores) {
-							var score = game.$scores[ id ];
-							if (!scores[ id ]) scores[ id ] = {
-								words_count: 0, uniques_count: 0, invalids_count: 0, points: 0,
-								player: msg.chat.users[ id ] || chat.game.players[ id ]
-							};
+		return runKisa( msg.chat, opts ).then( results => {
+			if (!opts.disable_scores && opts.rounds >= 1) {
+				var scores  = {};
+				results.forEach( game => {
+					for (var id in game.$scores) {
+						var score = game.$scores[ id ];
+						if (!scores[ id ]) scores[ id ] = {
+							words_count: 0, uniques_count: 0, invalids_count: 0, points: 0,
+							player: msg.chat.users[ id ] || chat.game.players[ id ]
+						};
 
-							scores[id].words_count    += score.words.length;
-							scores[id].uniques_count  += score.uniques.length;
-							scores[id].invalids_count += score.invalids.length;
-						}
-					});
-
-					for (var id in scores) {
-						scores[id].points = 0;
-
-						scores[id].points += scores[id].words_count    * 1;
-						scores[id].points += scores[id].uniques_count  * 1;
-						scores[id].points -= scores[id].invalids_count * 1;
+						scores[id].words_count    += score.words.length;
+						scores[id].uniques_count  += score.uniques.length;
+						scores[id].invalids_count += score.invalids.length;
 					}
+				});
 
-					Object.keys( scores ).sort(( a, b ) => ( a.points - b.points )).forEach(( id, i, ids ) => {
-						var score = scores[id], player = score.player;
-						var str   = `<b>${ player.label }, ${ score.points } piste${ score.points == 1 ? '' : 'ttä' }:</b>\n`;
-						str += `${ score.words_count } hyväksyttyä`;
-						if (ids.length > 1) str += `, ${ score.uniques_count } uniikkia`;
-						str += ` ja ${ score.invalids_count } hylättyä sanaa.`;
-						msg.chat.sendMessage( str, { parse_mode: "HTML" });
-					}); 
+				for (var id in scores) {
+					scores[id].points = 0;
+
+					scores[id].points += scores[id].words_count    * 1;
+					scores[id].points += scores[id].uniques_count  * 1;
+					scores[id].points -= scores[id].invalids_count * 1;
 				}
-				msg.chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
-			});
-		}).catch( err => {
-			console.error( "ERROR at bot.onText(\/start) ::", err );
-			msg.chat.sendMessage( `Virhe!\n${ err }`);
+
+				Object.keys( scores ).sort(( a, b ) => ( a.points - b.points )).forEach(( id, i, ids ) => {
+					var score = scores[id], player = score.player;
+					var str   = `<b>${ player.label }, ${ score.points } piste${ score.points == 1 ? '' : 'ttä' }:</b>\n`;
+					str += `${ score.words_count } hyväksyttyä`;
+					if (ids.length > 1) str += `, ${ score.uniques_count } uniikkia`;
+					str += ` ja ${ score.invalids_count } hylättyä sanaa.`;
+					msg.chat.sendMessage( str, { parse_mode: "HTML" });
+				}); 
+			}
+			msg.chat.sendMessage( "Kilpailu päättyi. Kiitos kaikille " + String.fromCodePoint( 0x1F60A ));
 		});
+	}).catch( err => {
+		console.error( "ERROR at bot.onText(\/start) ::", err );
+		msg.chat.sendMessage( `Virhe!\n${ err }`);
 	});
-})();
+}, "Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>)" );
 
 
 /**
  */
-(() => {
-	console.log( "INIT :: Initializing /stop" );
-	bot.onText(/^\/stop$/, (msg, match) => {
-		console.debug( "bot.onText(\/stop, ( msg, match )) :: ", msg, match );
+bot.addCommand( "stop", null, (msg, match) => {
+	doStopGame( msg.chat, Game.get( msg.chat ));
 
-		try {
-			doStopGame( msg.chat, Game.get( msg.chat ));
-		} catch( err ) {
-			console.error( "ERROR at bot.onText(\/stop) ::", err );
+	function doStopGame( chat, game ) {
+
+		if (chat.$$nextRoundTimeout) {
+			clearTimeout( chat.$$nextRoundTimeout ); 
+		} else if (!game) {
+			return chat.sendMessage( "Ei peliä, joka lopettaa!" );
+		} 
+
+		if (game) {
+			game.$$abortKisa = true;
+			game.stop();
 		}
 
-		function doStopGame( chat, game ) {
-
-			if (chat.$$nextRoundTimeout) {
-				clearTimeout( chat.$$nextRoundTimeout ); 
-			} else if (!game) {
-				return chat.sendMessage( "Ei peliä, joka lopettaa!" );
-			} 
-
-			if (game) {
-				game.$$abortKisa = true;
-				game.stop();
-			}
-
-			chat.sendMessage( "Peli keskeytetty!" );
-		}
-	});
-})();
+		chat.sendMessage( "Peli keskeytetty!" );
+	}
+}, "Lopeta nykyinen peli" );
 
 
 

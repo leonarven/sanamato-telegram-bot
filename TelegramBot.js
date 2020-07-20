@@ -3,7 +3,45 @@ class OfflineTelegramBot {
 	on() {}
 	onText() {}
 }
+class TelegramBot extends (require( 'node-telegram-bot-api' )) {
+	constructor( token, config ){
+		super( token, config );
 
+		this.commands = {};
+
+		this.addCommand( "help", null, ( msg ) => {
+			msg.chat.sendMessage( Object.keys( this.commands ).map( cmd => {
+				var obj = this.commands[ cmd ];
+				return `/${ obj.cmd } - ${ obj.description || obj.regexp }`;
+			}).join( "\n\n" ), { parse_mode: "Markdown" });
+		}, "Näytä ohjelistaus" );
+	}
+
+	addCommand( cmd, regexp, callbackFn, description = "" ){
+		if (typeof this.commands[ cmd ] == "object") return console.warn( `Unable to overwrite command /${ cmd }` );
+		
+		regexp = regexp || new RegExp( `^/${ cmd }$` );
+
+		console.log( `TelegramBot.addCommand( cmd, regexp ) :: /${ cmd }`, regexp );
+
+		this.commands[ cmd ] = { cmd, regexp, callbackFn, description };
+		
+		this.onText( regexp, ( msg, match ) => {
+			console.log( `bot.onText(\/${ cmd }, ( msg, match )) :: `, msg, match );
+
+			return new Promise(( resolve, reject ) => {
+				try {
+					Promise.resolve( callbackFn( msg, match )).then( resolve ).catch( reject );
+				} catch( err ) {
+					reject( err );
+				}
+			}).catch( err => {
+				console.error( `ERROR @ bot.onText(\/${ cmd }) ::`, err );
+				throw err;
+			});
+		});
+	}
+}
 
 const chats = {};
 class Chat {
@@ -81,7 +119,4 @@ class MessageSender {
 }
 
 
-module.exports = {
-	TelegramBot: require( 'node-telegram-bot-api' ),
-	OfflineTelegramBot, MessageSender, Chat
-};
+module.exports = { TelegramBot, OfflineTelegramBot, MessageSender, Chat };
