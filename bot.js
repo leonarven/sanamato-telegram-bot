@@ -62,7 +62,10 @@ bot.on('text', msg => {
 					game.players[ msg.from.id ].$msgs = [];
 					game.players[ msg.from.id ].label = user.label;
 				}
-				game.players[ msg.from.id ].$msgs.push( msg );
+
+				if (msg.text && msg.text.trim()[0] != "/") {
+					game.players[ msg.from.id ].$msgs.push( msg );
+				}
 			}
 		}
 	}
