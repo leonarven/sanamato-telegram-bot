@@ -25,3 +25,11 @@
 `/die` - Sammuta botti (Vaatii käyttäjän ID:n määritellyn: `node bot.js --admins=ID1,ID2 ...`)
 
 `/echo <viesti>` - Toistaa viestin `viesti` :D
+
+# TODO
+
+ * Sanojen oikeellisuuden tarkistaminen esiasetetun tietokannan perusteella ([YSO?](https://finto.fi/yso/fi/))
+ * Tilastot peleistä tietokantaan
+ * Pelin/kisan oletusasetusten määrääminen
+ * Paremmat ohjeet & interaktiivisuutta
+ * Tietoisuus ja lisääntyminen
