@@ -68,6 +68,42 @@ bot.on('text', msg => {
 	}
 });
 
+bot.on( 'game', (msg, argv) => {
+	console.debug( "bot.on('game', (msg, argv)) ::", msg, argv );
+	const chatId = msg.chat && msg.chat.id || null;
+	const chat = msg.chat = Chat.get( msg.chat );
+});
+
+bot.on( 'inline_query', (msg, argv) => {
+	console.debug( "bot.on('inline_query', (msg, argv)) ::", msg, argv );
+	const chatId = msg.chat && msg.chat.id || null;
+	const chat = msg.chat = Chat.get( msg.chat );
+
+	const results = [{
+		type  : "article",
+		id    : "game_peli",
+		title : "Peruspeli",
+		description: "6-kokoinen manuaalisesti lopetettava peli",
+		input_message_content: {
+			message_text: "/peli"
+		}
+	}, {
+		type  : "article",
+		id    : "game_kisa",
+		title : "Peruskilpailu",
+		description: "6-kokoinen yhden kierroksen kilpailu, kesto 2 minuuttia",
+		input_message_content: {
+			message_text: "/kisa"
+		}
+	}];
+	bot.answerInlineQuery( msg.id, results );
+});
+
+bot.on( 'chosen_inline_result', (msg, argv) => {
+	console.debug( "bot.on('chosen_inline_result', (msg, argv)) ::", msg, argv );
+	const chatId = msg.chat && msg.chat.id || null;
+	const chat = msg.chat = Chat.get( msg.chat );
+});
 
 /**
  */
