@@ -239,11 +239,20 @@ bot.addCommand( "kisa", /^\/kisa(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\s+(\d+)(?:\
 	});
 }, "Aloita kilpailu (parametrit: /kisa <koko=5> <aika=120> <kierroksia=1> <kierrosten väli> <kirjaimisto=FIN>)" );
 
+/************************************************/
 
+Promise.resolve( bot.me ).then( me => {
+	for (var i in bot.$commands) {
+		var cmd = bot.$commands[i];
+		var _cmd = cmd.cmd + "@" + bot.me.username;
+		var _regexp = cmd.regexp.toString();
+		_regexp = _regexp.substr( 1, _regexp.length - 2).replace( cmd.cmd, _cmd );
+		bot.addCommand( _cmd, _regexp, cmd.callbackFn, cmd.description );
+	}
+});
 
 
 /************************************************/
-
 
 /**
  * @param {number}  [opts.size=5]               - Käytetyn laudan koko

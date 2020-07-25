@@ -7,24 +7,30 @@ class TelegramBot extends (require( 'node-telegram-bot-api' )) {
 	constructor( token, config ){
 		super( token, config );
 
-		this.commands = {};
+		this.$commands = {};
+
+		this.me = this.getMe().then( me => {
+			return this.me = me;
+		});
+
 
 		this.addCommand( "help", null, ( msg ) => {
-			msg.chat.sendMessage( Object.keys( this.commands ).map( cmd => {
-				var obj = this.commands[ cmd ];
+			msg.chat.sendMessage( Object.keys( this.$commands ).map( cmd => {
+				var obj = this.$commands[ cmd ];
 				return `/${ obj.cmd } - ${ obj.description || obj.regexp }`;
 			}).join( "\n\n" ), { parse_mode: "Markdown" });
 		}, "Näytä ohjelistaus" );
 	}
 
 	addCommand( cmd, regexp, callbackFn, description = "" ){
-		if (typeof this.commands[ cmd ] == "object") return console.warn( `Unable to overwrite command /${ cmd }` );
-		
+		if (typeof this.$commands[ cmd ] == "object") return console.warn( `Unable to overwrite command /${ cmd }` );
+	
+		if (typeof regexp == "string") regexp = new RegExp( regexp ); 
 		regexp = regexp || new RegExp( `^/${ cmd }$` );
 
 		console.log( `TelegramBot.addCommand( cmd, regexp ) :: /${ cmd }`, regexp );
 
-		this.commands[ cmd ] = { cmd, regexp, callbackFn, description };
+		this.$commands[ cmd ] = { cmd, regexp, callbackFn, description };
 		
 		this.onText( regexp, ( msg, match ) => {
 			console.log( `bot.onText(\/${ cmd }, ( msg, match )) :: `, msg, match );
