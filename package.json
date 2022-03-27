@@ -5,7 +5,7 @@
   "main": "bot.js",
   "dependencies": {
     "canvas": "^2.6.1",
-    "minimist": "^1.2.5",
+    "minimist": "^1.2.6",
     "node-telegram-bot-api": "^0.50.0"
   },
   "devDependencies": {},
